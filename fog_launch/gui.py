@@ -1249,8 +1249,10 @@ class App(tk.Tk):
                 # Without its own ID, Windows groups the window under Python's icon.
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("senisinx.FogLaunch")
                 self.iconbitmap(default=str(ASSETS / "icon.ico"))
+            # The large picture for big icons, the simpler 32 px variant for the title bar and the taskbar.
             self.logo = tk.PhotoImage(file=str(ASSETS / "icon.png"))
-            self.iconphoto(True, self.logo)
+            self.logo_small = tk.PhotoImage(file=str(ASSETS / "icon-32.png"))
+            self.iconphoto(True, self.logo, self.logo_small)
         except (tk.TclError, OSError, AttributeError):
             pass  # a missing icon must never stop the program
 
