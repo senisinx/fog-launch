@@ -10,7 +10,10 @@ from fog_launch import ini, runner
 from fog_launch.core import (
     GAME_EXE,
     Manager,
+    UnknownLegendary,
     check_name,
+    check_position,
+    sha256_of,
     import_better_together,
     read_better_together,
     split_arguments,
@@ -124,7 +127,10 @@ class Sandbox(unittest.TestCase):
         self.addCleanup(patch.stop)
         self.manager = Manager(Config(self.root / "data"))
         self.manager.config.data.update(
-            legendary=str(fake), settings_ini=str(self.settings), input_ini=str(self.config_dir / "Input.ini")
+            legendary=str(fake),
+            settings_ini=str(self.settings),
+            input_ini=str(self.config_dir / "Input.ini"),
+            trusted_legendary=[sha256_of(fake)],
         )
         self.manager.set_library(self.root / "profiles")
         self.manager.set_game_dir(self.game)
@@ -170,7 +176,7 @@ class ManagerTests(Sandbox):
     def test_command_points_legendary_at_the_profile(self):
         self.manager.create_profile("one")
         command, env = self.manager.command(["status"], "one")
-        self.assertEqual(command[1:], ["status"])
+        self.assertEqual(command[-2:], [self.manager.config.get("legendary"), "status"])
         self.assertEqual(env["XDG_CONFIG_HOME"], str(self.root / "profiles" / "one"))
         self.assertNotIn("LEGENDARY_CONFIG_PATH", env)
 

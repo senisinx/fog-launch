@@ -7,23 +7,34 @@ profile's Epic sign-in in `<profile>/legendary/`.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import shlex
 import shutil
 import stat
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from . import ini
-from .store import Config, FogError, read_json, write_json
+from .store import Cipher, Config, FogError, default_cipher, read_json, write_bytes_atomic, write_json
 
 GAME_APP = "Brill"  # Epic's internal name for Dead by Daylight
 GAME_EXE = "DeadByDaylight.exe"
 LOGIN_URL = "https://legendary.gl/epiclogin"
 KEPT_BACKUPS = 10
+SEALED = "user.json.fogsealed"
+
+# SHA-256 of official Legendary builds from github.com/legendary-gl/legendary/releases.
+KNOWN_LEGENDARY = {
+    "6be77857dc0a6dd33ea7442ce8b5291944ec6da53757f81ca95b57ce794baf5b": "0.21.1 legendary_windows_x64.exe",
+    "4c01a14c0acb0c46069b197ae7212ea4ea6b861661126ca0593cdac31658fb01": "0.21.0 legendary_windows_x64.exe",
+    "01ea22ea51749f46a0019657f64fc0d34429fb7cbf9b590c0848c0e0bd9c1f07": "0.20.34 legendary.exe",
+}
 
 _NAME = re.compile(r"[\w .-]+")
 _RESERVED = {"con", "prn", "aux", "nul"} | {f"{p}{n}" for p in ("com", "lpt") for n in range(1, 10)}
@@ -46,6 +57,19 @@ def check_name(name: str) -> str:
     return name
 
 
+def check_position(position: Any) -> list[int] | None:
+    """A window position as [x, y, width, height], or None for "leave it where it is"."""
+    if not position:
+        return None
+    try:
+        x, y, width, height = (int(value) for value in position)
+    except (TypeError, ValueError) as error:
+        raise FogError("The window position needs four whole numbers: X, Y, width and height.") from error
+    if not (200 <= width <= 16384 and 200 <= height <= 8640 and -32000 <= x <= 32000 and -32000 <= y <= 32000):
+        raise FogError("The window position is outside the possible range.")
+    return [x, y, width, height]
+
+
 def split_arguments(text: str) -> list[str]:
     """Split extra game arguments the way a Windows command line would."""
     try:
@@ -58,9 +82,34 @@ def split_arguments(text: str) -> list[str]:
     ]
 
 
+class UnknownLegendary(FogError):
+    """The Legendary file is not one of the known official builds."""
+
+    def __init__(self, path: str, sha256: str):
+        super().__init__(
+            "'{file}' is not a known official Legendary build (SHA-256 {sha256}). "
+            "It may have been replaced.",
+            file=path,
+            sha256=sha256,
+        )
+        self.sha256 = sha256
+
+
+def sha256_of(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as file:
+        for chunk in iter(lambda: file.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 class Manager:
-    def __init__(self, config: Config | None = None):
+    def __init__(self, config: Config | None = None, cipher: Cipher | None = None):
         self.config = config or Config()
+        self.cipher = cipher or default_cipher()
+        self._open: dict[str, int] = {}
+        self._open_lock = threading.Lock()
+        self._checked: dict[tuple[str, int, int], str] = {}
 
     # ------------------------------------------------------------- locations
 
@@ -126,6 +175,24 @@ class Manager:
         return self.settings_ini if kind == "graphics" else self.input_ini
 
     def legendary(self) -> str:
+        """Path of the Legendary program, after checking it is a build you trust."""
+        path = self.find_legendary()
+        info = os.stat(path)
+        key = (path, info.st_size, info.st_mtime_ns)
+        if key not in self._checked:
+            self._checked[key] = sha256_of(path)
+        digest = self._checked[key]
+        if digest not in KNOWN_LEGENDARY and digest not in (self.config.get("trusted_legendary") or []):
+            raise UnknownLegendary(path, digest)
+        return path
+
+    def trust_legendary(self, digest: str) -> None:
+        trusted = list(self.config.get("trusted_legendary") or [])
+        if digest not in trusted:
+            trusted.append(digest)
+        self.config.set("trusted_legendary", trusted)
+
+    def find_legendary(self) -> str:
         """Path of the Legendary program, from the settings or the usual places."""
         names = ("legendary.exe", "legendary") if os.name == "nt" else ("legendary",)
         configured = self.config.get("legendary")
@@ -212,7 +279,13 @@ class Manager:
 
     def account_name(self, profile: str) -> str | None:
         """The Epic display name a profile is signed in as, if it is."""
-        user = read_json(self.profile_dir(profile) / "legendary" / "user.json")
+        folder = self.profile_dir(profile) / "legendary"
+        user = read_json(folder / "user.json")
+        if user is None and (folder / SEALED).is_file():
+            try:
+                user = json.loads(self.cipher.unprotect((folder / SEALED).read_bytes()))
+            except (FogError, OSError, ValueError):
+                return "?"
         if isinstance(user, dict) and user:
             return str(user.get("displayName") or user.get("account_id") or "?")
         return None
@@ -288,7 +361,10 @@ class Manager:
         env = os.environ.copy()
         env.pop("LEGENDARY_CONFIG_PATH", None)  # would override the profile folder
         env["XDG_CONFIG_HOME"] = str(folder)
-        return [self.legendary(), *arguments], env
+        program = self.legendary()
+        if program.endswith(".py"):  # a Legendary run from source, and the stand-in in the tests
+            return [sys.executable, program, *arguments], env
+        return [program, *arguments], env
 
     def launch_arguments(self) -> list[str]:
         arguments = ["launch", GAME_APP]
@@ -422,6 +498,7 @@ class Manager:
                     "graphics": entry.get("graphics") or None,
                     "input": entry.get("input") or None,
                     "game_dir": str(entry["game_dir"]) if entry.get("game_dir") else None,
+                    "position": check_position(entry.get("position")),
                 }
             )
         self.config.data["sequences"][name] = {"delay": delay, "entries": cleaned}
@@ -440,6 +517,99 @@ class Manager:
         sequences[new] = sequences.pop(old)
         self.config.save()
         return new
+
+    # ------------------------------------------- encrypted sign-ins (DPAPI)
+    #
+    # With encryption on, a profile's user.json, which holds the Epic tokens,
+    # only exists as an encrypted copy. It is decrypted just before Legendary
+    # runs for that profile and encrypted again when Legendary has finished,
+    # because Legendary refreshes the tokens and rewrites the file.
+
+    @property
+    def encrypting(self) -> bool:
+        return bool(self.config.get("encrypt_signins"))
+
+    def _signin_files(self, profile: str) -> tuple[Path, Path]:
+        folder = self.profile_dir(profile) / "legendary"
+        return folder / "user.json", folder / SEALED
+
+    def _seal(self, profile: str) -> None:
+        plain, sealed = self._signin_files(profile)
+        if not plain.exists():
+            # Legendary deleted the sign-in: the profile was signed out.
+            sealed.unlink(missing_ok=True)
+            return
+        data = plain.read_bytes()
+        try:
+            signed_in = bool(json.loads(data or b"null"))
+        except ValueError:
+            signed_in = True  # unreadable, but keep it rather than lose it
+        if signed_in:
+            write_bytes_atomic(sealed, self.cipher.protect(data))
+        else:
+            sealed.unlink(missing_ok=True)
+        plain.unlink()
+
+    def _unseal(self, profile: str) -> None:
+        plain, sealed = self._signin_files(profile)
+        if sealed.is_file() and not plain.exists():
+            write_bytes_atomic(plain, self.cipher.unprotect(sealed.read_bytes()))
+
+    def open_signin(self, profile: str) -> None:
+        """Make the sign-in readable for Legendary. Pair every call with close_signin."""
+        if not self.encrypting:
+            return
+        with self._open_lock:
+            if self._open.get(profile, 0) == 0:
+                self._unseal(profile)
+            self._open[profile] = self._open.get(profile, 0) + 1
+
+    def close_signin(self, profile: str) -> None:
+        if not self.encrypting:
+            return
+        with self._open_lock:
+            count = self._open.get(profile, 0) - 1
+            if count > 0:
+                self._open[profile] = count
+                return
+            self._open.pop(profile, None)
+            try:
+                self._seal(profile)
+            except (OSError, FogError):
+                pass  # tried again at the next start; the sign-in stays usable
+
+    def seal_leftovers(self) -> None:
+        """Encrypt sign-ins that a crash left readable. Only call while nothing runs."""
+        if not self.encrypting:
+            return
+        for profile in self.profiles():
+            plain, _sealed = self._signin_files(profile)
+            if plain.exists():
+                try:
+                    self._seal(profile)
+                except (OSError, FogError):
+                    pass
+
+    def set_encryption(self, on: bool) -> int:
+        """Encrypt or decrypt the sign-ins of all profiles. Returns how many changed."""
+        if on and not self.cipher.available:
+            raise FogError("Encrypting the sign-ins is only possible on Windows.")
+        changed = 0
+        for profile in self.profiles():
+            plain, sealed = self._signin_files(profile)
+            try:
+                if on and plain.exists():
+                    self._seal(profile)
+                    changed += 1
+                elif not on and sealed.is_file():
+                    self._unseal(profile)
+                    sealed.unlink()
+                    changed += 1
+            except OSError as error:
+                raise FogError("The sign-in of '{name}' could not be changed: {error}",
+                               name=profile, error=error) from error
+        self.config.set("encrypt_signins", on)
+        return changed
 
 
 # ------------------------------------------------- taking over Better Together
@@ -563,4 +733,11 @@ def import_better_together(
         else:
             data["sequences"][name] = sequence
     manager.config.save()
+    if manager.encrypting:
+        manager.seal_leftovers()
+        if not copy_to:
+            notes.append(FogError(
+                "Encrypted sign-ins are on, so these profiles are now encrypted and "
+                "Better Together can no longer use them."
+            ))
     return notes

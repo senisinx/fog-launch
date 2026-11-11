@@ -1,0 +1,57 @@
+name: Release
+
+# Runs when a release is published on GitHub. It builds FogLaunch.exe from
+# exactly the tagged source, attaches it with its SHA-256, and records a
+# build attestation that anyone can check with:
+#   gh attestation verify FogLaunch.exe --repo senisinx/Fog-Launch
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: The tag matches the version in the code
+        shell: bash
+        run: |
+          version=$(python -c "import fog_launch; print(fog_launch.__version__)")
+          if [ "v$version" != "$TAG" ]; then
+            echo "The tag $TAG does not match fog_launch/__init__.py ($version)."
+            exit 1
+          fi
+      - name: Run the tests
+        run: python -m unittest discover -s tests -t . -v
+      - name: Build FogLaunch.exe
+        run: |
+          python -m pip install pyinstaller==6.11.1
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name FogLaunch --icon fog_launch/assets/icon.ico --add-data "fog_launch/assets;fog_launch/assets" fog_launch.pyw
+      - name: Checksum
+        shell: bash
+        run: |
+          cd dist
+          sha256sum FogLaunch.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Build attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: dist/FogLaunch.exe
+      - name: Attach to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/FogLaunch.exe dist/SHA256SUMS.txt --clobber

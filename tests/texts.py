@@ -17,7 +17,7 @@ def english_texts() -> set[str]:
             if isinstance(node, ast.Call):
                 name = getattr(node.func, "id", getattr(node.func, "attr", ""))
                 first = node.args[0] if node.args else None
-                if name in {"t", "FogError", "IniError"} and isinstance(first, ast.Constant):
+                if name in {"t", "FogError", "IniError", "__init__"} and isinstance(first, ast.Constant):
                     if isinstance(first.value, str):
                         texts.add(first.value)
             elif isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") in STATUS_TEXTS:

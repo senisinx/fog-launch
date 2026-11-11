@@ -109,7 +109,8 @@ GERMAN = {
     "Graphics preset": "Grafik-Preset",
     "Input preset": "Eingabe-Preset",
     "(current settings)": "(aktuelle Einstellungen)",
-    "(from the settings)": "(aus den Einstellungen)",
+    "–: current settings, the folder from the settings, the game decides.":
+        "–: aktuelle Einstellungen, Ordner aus den Einstellungen, das Spiel entscheidet.",
     "Launch sequence": "Folge starten",
     "Seconds between two launches": "Sekunden zwischen zwei Starts",
     "With a preset, Fog Launch waits at least 30 seconds so the game can read it.":
@@ -208,26 +209,105 @@ GERMAN = {
     "Treat it like a password: do not share it or put it in a synced folder.":
         "Im Profilordner liegt pro Profil ein Unterordner mit dessen Epic-Anmeldung. Behandle ihn wie ein "
         "Passwort: nicht weitergeben und nicht in einen synchronisierten Ordner legen.",
-    "not found – run get_legendary.py or choose legendary.exe":
-        "nicht gefunden – get_legendary.py ausführen oder legendary.exe wählen",
     "Update Fog Launch…": "Fog Launch aktualisieren…",
     "Version {version}": "Version {version}",
     "Updating Fog Launch": "Fog Launch wird aktualisiert",
-    "Fetch the newest Fog Launch from github.com/{repository} and replace the program files in "
-    "'{folder}'? Your profiles and settings are not touched.":
-        "Den neuesten Stand von Fog Launch von github.com/{repository} holen und die Programmdateien in "
-        "«{folder}» ersetzen? Deine Profile und Einstellungen bleiben unberührt.",
     "Fog Launch is already up to date.": "Fog Launch ist bereits aktuell.",
     "{count} files were updated. Restart Fog Launch now to use the new version?":
         "{count} Dateien wurden aktualisiert. Fog Launch jetzt neu starten, um die neue Version zu verwenden?",
     "git could not update Fog Launch: {error}": "git konnte Fog Launch nicht aktualisieren: {error}",
-    "The update could not be downloaded: {error}": "Das Update liess sich nicht herunterladen: {error}",
     "The downloaded update is not a valid ZIP file.": "Das heruntergeladene Update ist keine gültige ZIP-Datei.",
     "The downloaded update contains an unexpected path: {name}":
         "Das heruntergeladene Update enthält einen unerwarteten Pfad: {name}",
     "The downloaded update does not look like Fog Launch.":
         "Das heruntergeladene Update sieht nicht nach Fog Launch aus.",
     "The update could not be written: {error}": "Das Update liess sich nicht schreiben: {error}",
+    # game windows
+    "Game": "Spiel",
+    "running": "läuft",
+    "Close game": "Spiel beenden",
+    "Close all games": "Alle Spiele beenden",
+    "Close every open Dead by Daylight window?": "Alle offenen Fenster von Dead by Daylight schliessen?",
+    "Asked the game of '{name}' to close.": "Das Spiel von «{name}» wurde gebeten, sich zu schliessen.",
+    "Asked {count} game windows to close.": "{count} Spielfenster wurden gebeten, sich zu schliessen.",
+    "No Dead by Daylight window is open.": "Es ist kein Fenster von Dead by Daylight offen.",
+    "No window of '{name}' that Fog Launch launched is open.":
+        "Es ist kein von Fog Launch gestartetes Fenster von «{name}» offen.",
+    "No window of '{name}' that Fog Launch launched is open. Launch the profile, move its window where you "
+    "want it, then press this button again.":
+        "Es ist kein von Fog Launch gestartetes Fenster von «{name}» offen. Starte das Profil, schiebe sein "
+        "Fenster an die gewünschte Stelle und drücke diesen Knopf dann noch einmal.",
+    "Game windows can only be found and arranged on Windows.":
+        "Spielfenster lassen sich nur unter Windows finden und anordnen.",
+    "Window position": "Fensterposition",
+    "Take from the running window": "Vom laufenden Fenster übernehmen",
+    "Clear": "Leeren",
+    'Empty: the game decides. Works best with the display mode "Window" or "Borderless window" in the '
+    "graphics preset.":
+        "Leer: Das Spiel entscheidet. Klappt am besten mit dem Anzeigemodus «Fenster» oder «Rahmenloses "
+        "Fenster» im Grafik-Preset.",
+    "The window position needs four whole numbers: X, Y, width and height.":
+        "Die Fensterposition braucht vier ganze Zahlen: X, Y, Breite und Höhe.",
+    "The window position is outside the possible range.": "Die Fensterposition liegt ausserhalb des Möglichen.",
+    # shortcuts
+    "Desktop shortcut": "Desktop-Verknüpfung",
+    "Shortcut created: {file}": "Verknüpfung angelegt: {file}",
+    "Desktop shortcuts can only be created on Windows.": "Desktop-Verknüpfungen gibt es nur unter Windows.",
+    "The shortcut could not be created: {error}": "Die Verknüpfung liess sich nicht anlegen: {error}",
+    # encrypted sign-ins
+    "Encrypt the Epic sign-ins with Windows (DPAPI)": "Epic-Anmeldungen mit Windows verschlüsseln (DPAPI)",
+    "Encrypt the sign-ins of all profiles? They can then only be used by this Windows user on this PC, and "
+    "Better Together can no longer use profiles in the same folder. A profile folder copied to another PC "
+    "has to be signed in again.":
+        "Die Anmeldungen aller Profile verschlüsseln? Sie sind dann nur noch für diesen Windows-Benutzer auf "
+        "diesem PC nutzbar, und Better Together kann Profile im selben Ordner nicht mehr verwenden. Ein auf "
+        "einen anderen PC kopierter Profilordner muss neu angemeldet werden.",
+    "Store the sign-ins of all profiles unencrypted again?":
+        "Die Anmeldungen aller Profile wieder unverschlüsselt speichern?",
+    "Sign-ins encrypted: {count}": "Anmeldungen verschlüsselt: {count}",
+    "Sign-ins decrypted: {count}": "Anmeldungen entschlüsselt: {count}",
+    "Encrypting the sign-ins is only possible on Windows.":
+        "Die Anmeldungen lassen sich nur unter Windows verschlüsseln.",
+    "Windows could not encrypt or decrypt a sign-in (error {code}).":
+        "Windows konnte eine Anmeldung nicht ver- oder entschlüsseln (Fehler {code}).",
+    "The sign-in of '{name}' could not be changed: {error}":
+        "Die Anmeldung von «{name}» liess sich nicht ändern: {error}",
+    "Encrypted sign-ins are on, so these profiles are now encrypted and Better Together can no longer use them.":
+        "Die Verschlüsselung der Anmeldungen ist an, deshalb sind diese Profile jetzt verschlüsselt, und "
+        "Better Together kann sie nicht mehr verwenden.",
+    # Legendary
+    "Download Legendary": "Legendary herunterladen",
+    "Downloading Legendary": "Legendary wird heruntergeladen",
+    "Download Legendary {version} from its official GitHub releases? Fog Launch keeps the file only if its "
+    "checksum is right.":
+        "Legendary {version} von den offiziellen GitHub-Releases herunterladen? Fog Launch behält die Datei "
+        "nur, wenn die Prüfsumme stimmt.",
+    "Legendary saved: {file}": "Legendary gespeichert: {file}",
+    "not found – download it or choose legendary.exe": "nicht gefunden – herunterladen oder legendary.exe wählen",
+    "The downloaded Legendary does not match its checksum. Nothing was saved.":
+        "Das heruntergeladene Legendary passt nicht zur Prüfsumme. Es wurde nichts gespeichert.",
+    "'{file}' is not a known official Legendary build (SHA-256 {sha256}). It may have been replaced.":
+        "«{file}» ist kein bekannter offizieller Build von Legendary (SHA-256 {sha256}). Die Datei wurde "
+        "vielleicht ausgetauscht.",
+    "Only continue if you downloaded this file yourself from Legendary's official releases. Trust it from "
+    "now on?":
+        "Fahre nur fort, wenn du diese Datei selbst von den offiziellen Releases von Legendary geladen hast. "
+        "Ihr ab jetzt vertrauen?",
+    # updates
+    "Looking for a new version": "Suche nach einer neuen Version",
+    "Fog Launch {version} is the newest version.": "Fog Launch {version} ist die neueste Version.",
+    "Version {new} is available (you have {old}). Install it now? Your profiles and settings are not touched.":
+        "Version {new} ist verfügbar (du hast {old}). Jetzt installieren? Deine Profile und Einstellungen "
+        "bleiben unberührt.",
+    "No version of Fog Launch has been published yet.": "Es wurde noch keine Version von Fog Launch veröffentlicht.",
+    "GitHub's answer about the newest version could not be read.":
+        "Die Antwort von GitHub zur neuesten Version liess sich nicht lesen.",
+    "The download failed: {error}": "Der Download ist fehlgeschlagen: {error}",
+    "The program file of version {tag} is still being built. Try again in a few minutes.":
+        "Die Programmdatei von Version {tag} wird noch gebaut. Versuche es in ein paar Minuten noch einmal.",
+    "The downloaded program does not match its checksum. Nothing was changed.":
+        "Das heruntergeladene Programm passt nicht zur Prüfsumme. Es wurde nichts geändert.",
+    "{name} is not listed in {sums}.": "{name} steht nicht in {sums}.",
     # Better Together
     "Take over from Better Together": "Aus Better Together übernehmen",
     "Take over from Better Together…": "Aus Better Together übernehmen…",

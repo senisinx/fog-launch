@@ -14,10 +14,11 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from . import __version__, ini, update
+from . import __version__, cli, ini, update
 from .core import (
     LOGIN_URL,
     Manager,
+    UnknownLegendary,
     better_together_dir,
     import_better_together,
     read_better_together,
@@ -26,6 +27,7 @@ from .core import (
 from .i18n import set_language, t
 from .runner import Cancelled, Runner
 from .store import APP_NAME, FogError
+from .windows import Tracker
 
 GROUND = "#11171a"
 PANEL = "#182125"
@@ -227,9 +229,10 @@ class SignIn(Dialog):
 
 
 class SequenceEntry(Dialog):
-    def __init__(self, parent: tk.Misc, manager: Manager, entry: dict[str, Any] | None = None):
+    def __init__(self, parent: tk.Misc, manager: Manager, tracker: Tracker, entry: dict[str, Any] | None = None):
         super().__init__(parent, t("Profile in the sequence"))
         self.manager = manager
+        self.tracker = tracker
         entry = entry or {}
         self.current = t("(current settings)")
         self.profile = tk.StringVar(value=entry.get("profile") or "")
@@ -252,6 +255,40 @@ class SequenceEntry(Dialog):
         ttk.Label(self.body, text=t("Empty: the folder from the settings."), style="Hint.TLabel").grid(
             row=4, column=1, columnspan=2, sticky="w"
         )
+        ttk.Label(self.body, text=t("Window position")).grid(row=5, column=0, sticky="w", pady=(12, 4), padx=(0, 12))
+        place = ttk.Frame(self.body)
+        place.grid(row=5, column=1, columnspan=2, sticky="w", pady=(12, 4))
+        position = entry.get("position") or ["", "", "", ""]
+        self.position = [tk.StringVar(value=str(value)) for value in position]
+        for index, (label, variable) in enumerate(zip(("X", "Y", t("Width"), t("Height")), self.position)):
+            ttk.Label(place, text=label, style="Hint.TLabel").grid(row=0, column=index * 2, padx=(0 if index == 0 else 10, 4))
+            ttk.Entry(place, textvariable=variable, width=6).grid(row=0, column=index * 2 + 1)
+        row = ttk.Frame(self.body)
+        row.grid(row=6, column=1, columnspan=2, sticky="w")
+        ttk.Button(row, text=t("Take from the running window"), command=self._from_window).pack(side="left")
+        ttk.Button(row, text=t("Clear"), command=lambda: [v.set("") for v in self.position]).pack(
+            side="left", padx=(6, 0))
+        ttk.Label(
+            self.body, style="Hint.TLabel", wraplength=420, justify="left",
+            text=t("Empty: the game decides. Works best with the display mode \"Window\" or "
+                   "\"Borderless window\" in the graphics preset."),
+        ).grid(row=7, column=1, columnspan=2, sticky="w", pady=(4, 0))
+
+    def _from_window(self) -> None:
+        if not self.tracker.available:
+            messagebox.showinfo(APP_NAME, t("Game windows can only be found and arranged on Windows."), parent=self)
+            return
+        box = self.tracker.position_of(self.profile.get())
+        if box is None:
+            messagebox.showinfo(
+                APP_NAME,
+                t("No window of '{name}' that Fog Launch launched is open. Launch the profile, move its "
+                  "window where you want it, then press this button again.", name=self.profile.get()),
+                parent=self,
+            )
+            return
+        for variable, value in zip(self.position, box):
+            variable.set(str(value))
 
     def _browse(self) -> None:
         chosen = filedialog.askdirectory(parent=self, title=t("Game folder"))
@@ -264,11 +301,18 @@ class SequenceEntry(Dialog):
         game_dir = self.game_dir.get().strip()
         if game_dir:
             game_dir = str(self.manager.check_game_dir(game_dir))
+        values = [variable.get().strip() for variable in self.position]
+        position = None
+        if any(values):
+            from .core import check_position
+
+            position = check_position(values)
         return {
             "profile": self.profile.get(),
             "graphics": None if self.graphics.get() == self.current else self.graphics.get(),
             "input": None if self.input.get() == self.current else self.input.get(),
             "game_dir": game_dir or None,
+            "position": position,
         }
 
 
@@ -458,7 +502,8 @@ class ProfilesTab(Tab):
         super().__init__(app)
         self.tree = table(
             self,
-            [("profile", t("Profile"), 180), ("account", t("Epic account"), 200), ("game", t("Game folder"), 380)],
+            [("profile", t("Profile"), 170), ("account", t("Epic account"), 190), ("state", t("Game"), 90),
+             ("game", t("Game folder"), 320)],
             height=9,
         )
         self.tree.frame.pack(fill="both", expand=True)
@@ -471,8 +516,14 @@ class ProfilesTab(Tab):
         self.button(bar, t("Sign in…"), self.sign_in, action=True).pack(side="left", padx=(24, 0))
         self.button(bar, t("Sign out"), self.sign_out, action=True).pack(side="left", padx=(6, 0))
         self.button(bar, t("Launch"), self.launch, accent=True, action=True).pack(side="right")
+        second = ttk.Frame(self)
+        second.pack(fill="x", pady=(6, 0))
+        self.button(second, t("Desktop shortcut"), self.shortcut).pack(side="left")
+        self.button(second, t("Close all games"), self.close_all).pack(side="right")
+        self.button(second, t("Close game"), self.close_game).pack(side="right", padx=(0, 6))
         self.hint = ttk.Label(self, style="Hint.TLabel", wraplength=780, justify="left")
         self.hint.pack(anchor="w", pady=(10, 0))
+        self.after(2000, self.watch)
 
     def selected(self) -> str:
         index = selected_index(self.tree)
@@ -490,7 +541,7 @@ class ProfilesTab(Tab):
                 game = self.manager.game_dir_of(profile) or "–"
             except FogError:
                 account, game = "?", "–"
-            self.tree.insert("", "end", values=(profile, account, game))
+            self.tree.insert("", "end", values=(profile, account, "", game))
         children = self.tree.get_children()
         if children:
             active = self.manager.config.get("active")
@@ -502,6 +553,41 @@ class ProfilesTab(Tab):
             self.hint.configure(text=t("No profiles yet. Create one, then sign it in to Epic."))
         else:
             self.hint.configure(text=t("Double-click a profile to launch it. Each profile keeps its own Epic sign-in."))
+        self.show_running()
+
+    def show_running(self) -> None:
+        running = self.app.tracker.running()
+        for item, profile in zip(self.tree.get_children(), self.manager.profiles()):
+            self.tree.set(item, "state", t("running") if profile in running else "")
+
+    def watch(self) -> None:
+        try:
+            self.show_running()
+        finally:
+            self.after(2000, self.watch)
+
+    def need_windows(self) -> None:
+        if not self.app.tracker.available:
+            raise FogError("Game windows can only be found and arranged on Windows.")
+
+    def close_game(self) -> None:
+        self.need_windows()
+        name = self.selected()
+        if not self.app.tracker.close(name):
+            raise FogError("No window of '{name}' that Fog Launch launched is open.", name=name)
+        self.app.say(t("Asked the game of '{name}' to close.", name=name))
+
+    def close_all(self) -> None:
+        self.need_windows()
+        if not self.app.tracker.backend.game_windows():
+            raise FogError("No Dead by Daylight window is open.")
+        if messagebox.askyesno(APP_NAME, t("Close every open Dead by Daylight window?"), parent=self):
+            count = self.app.tracker.close_all()
+            self.app.say(t("Asked {count} game windows to close.", count=count))
+
+    def shortcut(self) -> None:
+        name = self.selected()
+        self.app.make_shortcut("profile", name)
 
     def new(self) -> None:
         if not self.manager.library:
@@ -561,13 +647,15 @@ class SequencesTab(Tab):
         self.button(bar, t("New…"), self.new).pack(side="left")
         self.button(bar, t("Rename…"), self.rename).pack(side="left", padx=(6, 0))
         self.button(bar, t("Delete"), self.delete).pack(side="left", padx=(6, 0))
+        self.button(left, t("Desktop shortcut"), self.shortcut).pack(anchor="w", pady=(6, 0))
 
         right = ttk.Frame(self)
         right.grid(row=0, column=1, sticky="nsew")
         self.tree = table(
             right,
-            [("number", "#", 30), ("profile", t("Profile"), 130), ("graphics", t("Graphics preset"), 150),
-             ("input", t("Input preset"), 150), ("game", t("Game folder"), 170)],
+            [("number", "#", 28), ("profile", t("Profile"), 120), ("graphics", t("Graphics preset"), 110),
+             ("input", t("Input preset"), 110), ("game", t("Game folder"), 100),
+             ("window", t("Window position"), 120)],
             height=8,
         )
         self.tree.frame.pack(fill="both", expand=True)
@@ -588,7 +676,8 @@ class SequencesTab(Tab):
         spin.pack(side="left", padx=(8, 0))
         spin.bind("<FocusOut>", lambda _event: self.app.guard(self.store)())
         ttk.Label(right, style="Hint.TLabel", wraplength=600, justify="left",
-                  text=t("With a preset, Fog Launch waits at least 30 seconds so the game can read it.")).pack(
+                  text=t("With a preset, Fog Launch waits at least 30 seconds so the game can read it.") + " "
+                  + t("–: current settings, the folder from the settings, the game decides.")).pack(
             anchor="w", pady=(6, 0))
 
     def name(self) -> str | None:
@@ -621,11 +710,11 @@ class SequencesTab(Tab):
             return
         sequence = self.manager.sequences()[name]
         self.delay.set(str(sequence["delay"]))
-        current = t("(current settings)")
         for number, entry in enumerate(sequence["entries"], start=1):
             self.tree.insert("", "end", values=(
-                number, entry["profile"], entry.get("graphics") or current, entry.get("input") or current,
-                entry.get("game_dir") or t("(from the settings)"),
+                number, entry["profile"], entry.get("graphics") or "–", entry.get("input") or "–",
+                Path(entry["game_dir"]).name if entry.get("game_dir") else "–",
+                "{},{}  {}×{}".format(*entry["position"]) if entry.get("position") else "–",
             ))
         children = self.tree.get_children()
         if children and select is not None:
@@ -670,7 +759,7 @@ class SequencesTab(Tab):
 
     def add(self) -> None:
         entries = self.entries()
-        entry = SequenceEntry(self, self.manager).show()
+        entry = SequenceEntry(self, self.manager, self.app.tracker).show()
         if entry:
             self.store([*entries, entry], select=len(entries))
 
@@ -679,7 +768,7 @@ class SequencesTab(Tab):
         index = selected_index(self.tree)
         if index is None:
             raise FogError("Select an entry first.")
-        entry = SequenceEntry(self, self.manager, entries[index]).show()
+        entry = SequenceEntry(self, self.manager, self.app.tracker, entries[index]).show()
         if entry:
             self.store([*entries[:index], entry, *entries[index + 1:]], select=index)
 
@@ -701,6 +790,9 @@ class SequencesTab(Tab):
         name = self.need_name()
         self.store()
         self.app.work(t("Sequence {name}", name=name), lambda runner: runner.run_sequence(name))
+
+    def shortcut(self) -> None:
+        self.app.make_shortcut("sequence", self.need_name())
 
 
 class PresetTab(Tab):
@@ -974,12 +1066,16 @@ class SettingsTab(Tab):
             ("input_ini", "Input.ini", lambda: self.choose_ini("input")),
             ("legendary", "Legendary", self.choose_legendary),
         )
+        self.download_button: ttk.Button | None = None
         for row, (key, label, command) in enumerate(rows):
             ttk.Label(self, text=label).grid(row=row, column=0, sticky="w", pady=5, padx=(0, 14))
             self.paths[key] = tk.StringVar()
             ttk.Entry(self, textvariable=self.paths[key], state="readonly").grid(row=row, column=1, sticky="ew", pady=5)
             self.button(self, t("Browse…"), command).grid(row=row, column=2, padx=(6, 0))
         row = len(rows)
+        self.button(self, t("Download Legendary"), self.app.download_legendary, action=True).grid(
+            row=row, column=1, sticky="w", pady=(0, 6))
+        row += 1
         ttk.Label(self, text=t("Extra game arguments")).grid(row=row, column=0, sticky="w", pady=5, padx=(0, 14))
         self.arguments = tk.StringVar()
         entry = ttk.Entry(self, textvariable=self.arguments)
@@ -990,6 +1086,13 @@ class SettingsTab(Tab):
             self, variable=self.skip, command=self.app.guard(self.store),
             text=t("Skip Legendary's version check when launching (needed for shared installations)"),
         ).grid(row=row + 1, column=1, columnspan=2, sticky="w", pady=5)
+        self.encrypt = tk.BooleanVar()
+        self.encrypt_box = ttk.Checkbutton(
+            self, variable=self.encrypt, command=self.app.guard(self.toggle_encryption),
+            text=t("Encrypt the Epic sign-ins with Windows (DPAPI)"),
+        )
+        self.encrypt_box.grid(row=row + 2, column=1, columnspan=2, sticky="w", pady=5)
+        row += 1
         ttk.Label(self, text=t("Language")).grid(row=row + 2, column=0, sticky="w", pady=5, padx=(0, 14))
         self.languages = {t("Automatic"): "auto", "Deutsch": "de", "English": "en"}
         self.language = tk.StringVar()
@@ -1019,9 +1122,12 @@ class SettingsTab(Tab):
         self.paths["settings_ini"].set(str(manager.settings_ini))
         self.paths["input_ini"].set(str(manager.input_ini))
         try:
-            self.paths["legendary"].set(manager.legendary())
+            self.paths["legendary"].set(manager.find_legendary())
         except FogError:
-            self.paths["legendary"].set(t("not found – run get_legendary.py or choose legendary.exe"))
+            self.paths["legendary"].set(t("not found – download it or choose legendary.exe"))
+        self.encrypt.set(manager.encrypting)
+        if not manager.cipher.available:
+            self.encrypt_box.configure(state="disabled")
         self.arguments.set(manager.config.get("launch_args") or "")
         self.skip.set(bool(manager.config.get("skip_version_check")))
         code = manager.config.get("language")
@@ -1063,6 +1169,28 @@ class SettingsTab(Tab):
         self.manager.config.data["skip_version_check"] = bool(self.skip.get())
         self.manager.config.save()
 
+    def toggle_encryption(self) -> None:
+        on = bool(self.encrypt.get())
+        if self.app.runner:
+            self.encrypt.set(not on)
+            raise FogError("Fog Launch is still busy. Wait for it, or press Cancel.")
+        question = t(
+            "Encrypt the sign-ins of all profiles? They can then only be used by this Windows user on this PC, "
+            "and Better Together can no longer use profiles in the same folder. A profile folder copied to "
+            "another PC has to be signed in again."
+        ) if on else t("Store the sign-ins of all profiles unencrypted again?")
+        if not messagebox.askyesno(APP_NAME, question, parent=self, icon="warning" if on else "question"):
+            self.encrypt.set(not on)
+            return
+        try:
+            count = self.manager.set_encryption(on)
+        except FogError:
+            self.encrypt.set(self.manager.encrypting)
+            raise
+        self.app.refresh()
+        self.app.say(t("Sign-ins encrypted: {count}", count=count) if on
+                     else t("Sign-ins decrypted: {count}", count=count))
+
     def store_language(self) -> None:
         self.manager.config.set("language", self.languages[self.language.get()])
         self.app.say(t("The language changes the next time Fog Launch starts."))
@@ -1081,6 +1209,12 @@ class App(tk.Tk):
         self.set_icon()
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.runner: Runner | None = None
+        self.tracker = Tracker()
+        update.remove_old_exe()
+        try:
+            manager.seal_leftovers()
+        except FogError:
+            pass
 
         self.log = tk.Text(self, height=7, background="#0c1113", foreground=HAZE, insertbackground=MIST,
                            borderwidth=0, highlightthickness=0, padx=10, pady=8, state="disabled", wrap="word")
@@ -1166,9 +1300,9 @@ class App(tk.Tk):
         """
         if self.runner:
             raise FogError("Fog Launch is still busy. Wait for it, or press Cancel.")
-        if legendary:
-            self.manager.legendary()  # fail early, with a clear message
-        runner = Runner(self.manager, lambda kind, text: self.events.put((kind, text)), t)
+        if legendary and not self.check_legendary():
+            return
+        runner = Runner(self.manager, lambda kind, text: self.events.put((kind, text)), t, self.tracker)
         self.runner = runner
         self.set_busy(True)
         self.say(label)
@@ -1188,6 +1322,20 @@ class App(tk.Tk):
                     self.events.put(("then", lambda: then(result)))
 
         threading.Thread(target=run, daemon=True).start()
+
+    def check_legendary(self) -> bool:
+        """Make sure Legendary is there and trusted; ask about an unknown build."""
+        try:
+            self.manager.legendary()
+        except UnknownLegendary as error:
+            question = say(error) + "\n\n" + t(
+                "Only continue if you downloaded this file yourself from Legendary's official releases. "
+                "Trust it from now on?"
+            )
+            if not messagebox.askyesno(APP_NAME, question, parent=self, icon="warning"):
+                return False
+            self.manager.trust_legendary(error.sha256)
+        return True
 
     def set_busy(self, busy: bool) -> None:
         self.cancel_button.configure(state="normal" if busy else "disabled")
@@ -1236,15 +1384,26 @@ class App(tk.Tk):
         messagebox.showinfo(APP_NAME, text, parent=self)
 
     def update_program(self) -> None:
-        root = update.program_dir()
+        """Ask GitHub for the newest release, then offer it."""
+        self.work(t("Looking for a new version"), lambda _runner: update.latest_release(), legendary=False,
+                  then=self.offer_update)
+
+    def offer_update(self, release: update.Release) -> None:
+        if not release.newer:
+            messagebox.showinfo(APP_NAME, t("Fog Launch {version} is the newest version.", version=__version__),
+                                parent=self)
+            return
+        notes = release.notes[:1200] + ("…" if len(release.notes) > 1200 else "")
         question = t(
-            "Fetch the newest Fog Launch from github.com/{repository} and replace the program files in "
-            "'{folder}'? Your profiles and settings are not touched.",
-            repository=update.REPOSITORY,
-            folder=root,
+            "Version {new} is available (you have {old}). Install it now? Your profiles and settings are "
+            "not touched.",
+            new=release.tag,
+            old=__version__,
         )
+        if notes:
+            question += "\n\n" + notes
         if messagebox.askyesno(APP_NAME, question, parent=self):
-            self.work(t("Updating Fog Launch"), lambda _runner: update.update(root), legendary=False,
+            self.work(t("Updating Fog Launch"), lambda _runner: update.install(release), legendary=False,
                       then=self.after_update)
 
     def after_update(self, changed: int) -> None:
@@ -1253,8 +1412,29 @@ class App(tk.Tk):
             return
         question = t("{count} files were updated. Restart Fog Launch now to use the new version?", count=changed)
         if messagebox.askyesno(APP_NAME, question, parent=self):
-            subprocess.Popen([sys.executable, "-m", "fog_launch"], cwd=update.program_dir())
+            subprocess.Popen(update.restart_command(), cwd=update.program_dir())
             self.close()
+
+    def download_legendary(self) -> None:
+        question = t(
+            "Download Legendary {version} from its official GitHub releases? Fog Launch keeps the file only "
+            "if its checksum is right.",
+            version=update.LEGENDARY_VERSION,
+        )
+        if messagebox.askyesno(APP_NAME, question, parent=self):
+            self.work(t("Downloading Legendary"), lambda _runner: update.download_legendary(), legendary=False,
+                      then=self.after_legendary)
+
+    def after_legendary(self, path: Path) -> None:
+        if self.manager.config.get("legendary") and Path(self.manager.config.get("legendary")) != path:
+            self.manager.config.set("legendary", str(path))
+        self.refresh()
+        self.say(t("Legendary saved: {file}", file=path))
+
+    def make_shortcut(self, kind: str, name: str) -> None:
+        label = f"{APP_NAME} – {name}"
+        path = cli.create_shortcut(kind, name, label)
+        self.say(t("Shortcut created: {file}", file=path))
 
     def first_start(self) -> None:
         if self.manager.library:
