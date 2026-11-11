@@ -1,0 +1,101 @@
+Fog Launch – Nutzungsbedingungen / Terms of use
+Copyright (c) 2026 senisinx. Alle Rechte vorbehalten. All rights reserved.
+
+DEUTSCH
+
+1. Nutzung und Weitergabe. Du darfst Fog Launch kostenlos herunterladen und benutzen.
+   Du darfst das Programm unverändert und kostenlos an andere weitergeben, wenn diese
+   Bedingungen dabei bleiben (am einfachsten: den Link zum GitHub-Repository teilen).
+
+2. Bearbeiten nur mit Erlaubnis. Verändern, Bearbeiten, Übersetzen oder Weiterentwickeln
+   des Programms oder seines Quelltexts (auch in Teilen) sowie die Weitergabe oder
+   Veröffentlichung veränderter Fassungen ist nur mit vorheriger schriftlicher Erlaubnis
+   des Urhebers gestattet (z. B. per GitHub-Issue anfragen). Verkaufen ist nicht
+   gestattet. Ansehen und Forken auf GitHub im Rahmen der GitHub-Nutzungsbedingungen
+   bleiben davon unberührt.
+
+3. Inoffiziell. Fog Launch ist ein inoffizielles Fan-Tool. Es ist nicht mit Behaviour
+   Interactive (Dead by Daylight), Epic Games (Epic Games Store, Easy Anti-Cheat), den
+   Entwicklern von Legendary oder deren Partnern verbunden und wurde von ihnen weder
+   geprüft noch genehmigt. „Dead by Daylight“ und zugehörige Namen sind Marken ihrer
+   jeweiligen Inhaber.
+
+4. Auf eigene Gefahr. Die Nutzung erfolgt auf eigene Gefahr. Fog Launch startet das
+   Spiel über Legendary, einen inoffiziellen Ersatz für den Epic Games Launcher. Es
+   ändert keine Spieldateien und greift nicht auf den Speicher des Spielprozesses zu.
+   Es überschreibt auf Wunsch die Einstellungsdateien des Spiels (GameUserSettings.ini,
+   Input.ini) und verschiebt und schliesst Spielfenster mit den üblichen
+   Fensterfunktionen von Windows. Trotzdem kann niemand zusagen, wie Behaviour
+   Interactive, Epic Games oder ein Anti-Cheat-System ein externes Programm oder das
+   Spielen mit mehreren Konten bewertet. Es gibt keine Zusicherung, dass die Nutzung
+   nicht zu einer Verwarnung, Sperre oder dem Verlust eines Spiel- oder Epic-Kontos
+   führt. Ob du das Programm benutzt, entscheidest du selbst; die Regeln des Spiels und
+   von Epic einzuhalten, liegt bei dir.
+
+5. Anmeldedaten. Fog Launch speichert pro Profil die Anmeldung bei Epic in dem Ordner,
+   den du wählst. Wer diese Dateien hat, kann sich als dieses Konto anmelden. Für ihren
+   Schutz, für die Konten, die du verwendest, und für die Einhaltung der Bedingungen von
+   Epic bist du verantwortlich. Die Verschlüsselung mit Windows (DPAPI) schützt die
+   Dateien gegen Kopieren auf einen anderen PC, nicht gegen Programme, die unter deinem
+   Windows-Benutzer laufen.
+
+6. Ohne Gewähr. Das Programm wird so, wie es ist, ohne jede Gewährleistung
+   bereitgestellt – insbesondere ohne Gewähr für Richtigkeit, Verfügbarkeit oder
+   Eignung für einen bestimmten Zweck.
+
+7. Haftung. Soweit gesetzlich zulässig, haftet der Urheber nicht für Schäden aus der
+   Nutzung oder Nichtnutzbarkeit des Programms, insbesondere nicht für Sperren oder den
+   Verlust von Spiel- oder Epic-Konten, Anmeldedaten, Fortschritt, Einstellungen oder
+   Daten. Unberührt bleibt die Haftung für Vorsatz und grobe Fahrlässigkeit sowie für
+   Schäden an Leben, Körper oder Gesundheit.
+
+8. Fremde Bestandteile. Legendary und die Bestandteile, die in FogLaunch.exe eingepackt
+   sind (siehe THIRD_PARTY.md), stehen unter ihren eigenen Lizenzen; diese Bedingungen
+   gelten für sie nicht.
+
+ENGLISH
+
+1. Use and sharing. You may download and use Fog Launch free of charge. You may pass the
+   unmodified program on to others free of charge as long as these terms stay with it
+   (easiest: share the link to the GitHub repository).
+
+2. Modifying only with permission. Modifying, editing, translating or further developing
+   the program or its source code (in whole or in part), and distributing or publishing
+   modified versions, is only permitted with the author's prior written permission
+   (e.g. ask in a GitHub issue). Selling it is not permitted. Viewing and forking on
+   GitHub under GitHub's Terms of Service remain unaffected.
+
+3. Unofficial. Fog Launch is an unofficial fan tool. It is not affiliated with Behaviour
+   Interactive (Dead by Daylight), Epic Games (Epic Games Store, Easy Anti-Cheat), the
+   developers of Legendary or their partners, and it has not been reviewed or approved
+   by them. "Dead by Daylight" and related names are trademarks of their respective
+   owners.
+
+4. At your own risk. You use the program at your own risk. Fog Launch starts the game
+   through Legendary, an unofficial replacement for the Epic Games Launcher. It does not
+   modify game files and does not access the memory of the game process. If you ask it
+   to, it overwrites the game's settings files (GameUserSettings.ini, Input.ini), and it
+   moves and closes game windows with Windows' ordinary window functions. Still, nobody
+   can promise how Behaviour Interactive, Epic Games or an anti-cheat system judges an
+   external program or playing with several accounts. There is no assurance that using
+   it will not lead to a warning, a ban or the loss of a game or Epic account. Whether
+   you use it is your decision; following the rules of the game and of Epic is your
+   responsibility.
+
+5. Sign-in data. For each profile, Fog Launch stores the Epic sign-in in the folder you
+   choose. Whoever has these files can sign in as that account. You are responsible for
+   protecting them, for the accounts you use, and for following Epic's terms. Encryption
+   with Windows (DPAPI) protects the files against being copied to another PC, not
+   against programs that run under your Windows user.
+
+6. No warranty. The program is provided "as is", without warranty of any kind,
+   including accuracy, availability or fitness for a particular purpose.
+
+7. Liability. To the extent permitted by law, the author is not liable for any damage
+   arising from the use of or the inability to use the program, in particular not for
+   bans or the loss of game or Epic accounts, sign-in data, progress, settings or data.
+   Liability for intent and gross negligence and for injury to life, body or health
+   remains unaffected.
+
+8. Third-party parts. Legendary and the parts packed into FogLaunch.exe (see
+   THIRD_PARTY.md) are subject to their own licenses; these terms do not apply to them.

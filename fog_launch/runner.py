@@ -18,6 +18,7 @@ from typing import Any
 
 from .core import Manager
 from .store import FogError
+from .windows import Tracker
 
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 SETTLE_SECONDS = 30  # how long a locked preset stays in place for the game to read
@@ -59,18 +60,22 @@ def extract_code(pasted: str) -> str:
 
 
 class Runner:
-    def __init__(self, manager: Manager, emit: Emit, translate: Callable[..., str] | None = None):
+    def __init__(self, manager: Manager, emit: Emit, translate: Callable[..., str] | None = None,
+                 tracker: Tracker | None = None):
         self.manager = manager
         self.emit = emit
         self.t = translate or (lambda text, **values: text.format(**values))
+        self.tracker = tracker
         self.cancel = threading.Event()
         self._waited_for: subprocess.Popen[str] | None = None
+        self._started: list[subprocess.Popen[str]] = []
 
     # ------------------------------------------------------------ processes
 
     def _start(self, arguments: list[str], profile: str) -> subprocess.Popen[str]:
         command, env = self.manager.command(arguments, profile)
         self.emit("log", f"[{profile}] > {printable(command[1:])}\n")
+        self.manager.open_signin(profile)
         try:
             process = subprocess.Popen(
                 command,
@@ -84,18 +89,31 @@ class Runner:
                 creationflags=NO_WINDOW,
             )
         except OSError as error:
+            self.manager.close_signin(profile)
             raise FogError("Legendary could not be started: {error}", error=error) from error
 
         def pump() -> None:
             assert process.stdout is not None
-            with process.stdout:
-                for line in process.stdout:
-                    self.emit("log", f"[{profile}] {line.rstrip()}\n")
+            try:
+                with process.stdout:
+                    for line in process.stdout:
+                        self.emit("log", f"[{profile}] {line.rstrip()}\n")
+                process.wait()
+            finally:
+                # Legendary may have refreshed the tokens: encrypt them again.
+                self.manager.close_signin(profile)
 
         reader = threading.Thread(target=pump, daemon=True)
         reader.start()
         process.reader = reader  # type: ignore[attr-defined]
+        self._started.append(process)
         return process
+
+    def finish(self, timeout: float = 60) -> None:
+        """Wait until every Legendary started here has ended and its sign-in is closed again."""
+        end = time.monotonic() + timeout
+        for process in self._started:
+            process.reader.join(max(0.0, end - time.monotonic()))  # type: ignore[attr-defined]
 
     def run(self, arguments: list[str], profile: str) -> int:
         """Run a Legendary command to its end and return its exit code."""
@@ -157,11 +175,16 @@ class Runner:
             if not manager.has_metadata(profile):
                 raise FogError("Dead by Daylight is not in the Epic library of '{name}'.", name=profile)
 
-    def launch(self, profile: str, game_dir: str | Path | None = None) -> subprocess.Popen[str]:
-        self.prepare(profile, game_dir)
+    def _launch_game(self, profile: str, position: Any = None) -> subprocess.Popen[str]:
         process = self._start(self.manager.launch_arguments(), profile)
         self.emit("log", f"[{profile}] started\n")
+        if self.tracker is not None:
+            self.tracker.expect(profile, tuple(position) if position else None)
         return process
+
+    def launch(self, profile: str, game_dir: str | Path | None = None) -> subprocess.Popen[str]:
+        self.prepare(profile, game_dir)
+        return self._launch_game(profile)
 
     def launch_one(self, profile: str) -> None:
         process = self.launch(profile)
@@ -199,8 +222,7 @@ class Runner:
                     locked.add(kind)
                     used_preset = True
                     self.emit("log", f"[{profile}] preset: {preset}\n")
-                process = self._start(manager.launch_arguments(), profile)
-                self.emit("log", f"[{profile}] started\n")
+                process = self._launch_game(profile, entry.get("position"))
                 last = index == len(entries) - 1
                 seconds = int(sequence["delay"])
                 if used_preset:

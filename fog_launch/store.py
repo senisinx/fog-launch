@@ -22,6 +22,8 @@ DEFAULTS: dict[str, Any] = {
     "legendary": None,
     "launch_args": "",
     "skip_version_check": True,
+    "encrypt_signins": False,
+    "trusted_legendary": [],
     "sequences": {},
 }
 
@@ -37,6 +39,75 @@ class FogError(Exception):
         self.template = template
         self.values = values
         super().__init__(template.format(**values) if values else template)
+
+
+class Cipher:
+    """Encrypts the Epic sign-ins. This one is for systems without DPAPI."""
+
+    available = False
+
+    def protect(self, data: bytes) -> bytes:
+        raise FogError("Encrypting the sign-ins is only possible on Windows.")
+
+    def unprotect(self, data: bytes) -> bytes:
+        raise FogError("Encrypting the sign-ins is only possible on Windows.")
+
+
+class DpapiCipher(Cipher):
+    """Windows' own encryption, tied to the signed-in Windows user (DPAPI).
+
+    Only the same Windows user on the same PC can decrypt the data, and no
+    password has to be stored for it.
+    """
+
+    available = True
+    ENTROPY = b"Fog Launch sign-in"
+
+    def __init__(self) -> None:
+        import ctypes
+        from ctypes import wintypes
+
+        class Blob(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+        self.ctypes = ctypes
+        self.Blob = Blob
+        self.crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
+        self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+
+    def _blob(self, data: bytes) -> Any:
+        buffer = self.ctypes.create_string_buffer(data, len(data))
+        return self.Blob(len(data), self.ctypes.cast(buffer, self.ctypes.POINTER(self.ctypes.c_char))), buffer
+
+    def _run(self, function: Any, data: bytes) -> bytes:
+        source, _keep = self._blob(data)
+        entropy, _keep_entropy = self._blob(self.ENTROPY)
+        result = self.Blob()
+        ui_forbidden = 0x1
+        if not function(self.ctypes.byref(source), None, self.ctypes.byref(entropy), None, None, ui_forbidden,
+                        self.ctypes.byref(result)):
+            raise FogError("Windows could not encrypt or decrypt a sign-in (error {code}).",
+                           code=self.ctypes.get_last_error())
+        try:
+            return self.ctypes.string_at(result.pbData, result.cbData)
+        finally:
+            self.kernel32.LocalFree(result.pbData)
+
+    def protect(self, data: bytes) -> bytes:
+        return self._run(self.crypt32.CryptProtectData, data)
+
+    def unprotect(self, data: bytes) -> bytes:
+        return self._run(self.crypt32.CryptUnprotectData, data)
+
+
+def default_cipher() -> Cipher:
+    if os.name == "nt":
+        try:
+            return DpapiCipher()
+        except (OSError, AttributeError):
+            pass
+    return Cipher()
 
 
 def data_dir() -> Path:
