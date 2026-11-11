@@ -60,11 +60,19 @@ Graphics and input presets need no import: both programs store them as files nex
   Fog Launch's `backups` folder (the last ten). The editors only change keys that already exist in the file
   and leave every other line as it was.
 - **Own files.** Settings and backups are in `%APPDATA%\FogLaunch`.
-- **Network.** Fog Launch opens no connection. Legendary talks to Epic; `get_legendary.py` downloads one
-  file from GitHub; the sign-in by code opens a page in your browser.
+- **Network.** Fog Launch goes online in one case only: when you press **Settings → Update Fog Launch…**
+  (see below). Otherwise Legendary talks to Epic, `get_legendary.py` downloads one file from GitHub, and the
+  sign-in by code opens a page in your browser.
 
 It does not touch the game's files, memory or anti-cheat. Whether running several accounts at once is
 acceptable is between you, Epic and Behaviour.
+
+## Updating
+
+**Settings → Update Fog Launch…** fetches the newest state of this repository's `main` branch, after asking.
+A copy made with `git clone` is updated with `git pull --ff-only`; a copy from a ZIP download gets the
+newest ZIP from GitHub, and only the files inside it are replaced. Profiles, settings and a `legendary.exe`
+next to the program are not touched. Nothing is checked or downloaded in the background.
 
 ## Layout
 
@@ -76,6 +84,7 @@ acceptable is between you, Epic and Behaviour.
 | `fog_launch/gui.py` | The window |
 | `fog_launch/i18n.py` | German texts; the English text is the key |
 | `fog_launch/store.py` | Fog Launch's own settings file |
+| `fog_launch/update.py` | The update button: the only code that goes online |
 | `get_legendary.py` | Downloads Legendary and checks its checksum |
 
 ## Tests

@@ -14,7 +14,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from . import __version__, ini
+from . import __version__, ini, update
 from .core import (
     LOGIN_URL,
     Manager,
@@ -1001,6 +1001,9 @@ class SettingsTab(Tab):
         self.button(bar, t("Take over from Better Together…"), self.app.take_over, action=True).pack(side="left")
         self.button(bar, t("Open Fog Launch's data folder"), lambda: open_folder(self.manager.config.dir)).pack(
             side="left", padx=(6, 0))
+        self.button(bar, t("Update Fog Launch…"), self.app.update_program, action=True).pack(side="left", padx=(6, 0))
+        ttk.Label(bar, style="Hint.TLabel", text=t("Version {version}", version=__version__)).pack(
+            side="left", padx=(12, 0))
         ttk.Label(
             self, style="Hint.TLabel", wraplength=800, justify="left",
             text=t(
@@ -1150,11 +1153,21 @@ class App(tk.Tk):
 
     # ------------------------------------------------------- background work
 
-    def work(self, label: str, job: Callable[[Runner], None]) -> None:
-        """Run a job that talks to Legendary, without freezing the window."""
+    def work(
+        self,
+        label: str,
+        job: Callable[[Runner], Any],
+        legendary: bool = True,
+        then: Callable[[Any], None] | None = None,
+    ) -> None:
+        """Run a job in the background, without freezing the window.
+
+        `then` is called in the window's thread with what the job returned.
+        """
         if self.runner:
             raise FogError("Fog Launch is still busy. Wait for it, or press Cancel.")
-        self.manager.legendary()  # fail early, with a clear message
+        if legendary:
+            self.manager.legendary()  # fail early, with a clear message
         runner = Runner(self.manager, lambda kind, text: self.events.put((kind, text)), t)
         self.runner = runner
         self.set_busy(True)
@@ -1162,7 +1175,7 @@ class App(tk.Tk):
 
         def run() -> None:
             try:
-                job(runner)
+                result = job(runner)
             except Cancelled:
                 self.events.put(("end", t("Cancelled")))
             except FogError as error:
@@ -1171,6 +1184,8 @@ class App(tk.Tk):
                 self.events.put(("fail", f"{type(error).__name__}: {error}"))
             else:
                 self.events.put(("end", t("Done: {what}", what=label)))
+                if then:
+                    self.events.put(("then", lambda: then(result)))
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -1192,6 +1207,8 @@ class App(tk.Tk):
                     self.write_log(text)
                 elif kind == "status":
                     self.say(text)
+                elif kind == "then":
+                    text()
                 else:
                     self.runner = None
                     self.set_busy(False)
@@ -1217,6 +1234,27 @@ class App(tk.Tk):
         if notes:
             text += "\n\n" + "\n".join(say(note) for note in notes)
         messagebox.showinfo(APP_NAME, text, parent=self)
+
+    def update_program(self) -> None:
+        root = update.program_dir()
+        question = t(
+            "Fetch the newest Fog Launch from github.com/{repository} and replace the program files in "
+            "'{folder}'? Your profiles and settings are not touched.",
+            repository=update.REPOSITORY,
+            folder=root,
+        )
+        if messagebox.askyesno(APP_NAME, question, parent=self):
+            self.work(t("Updating Fog Launch"), lambda _runner: update.update(root), legendary=False,
+                      then=self.after_update)
+
+    def after_update(self, changed: int) -> None:
+        if not changed:
+            messagebox.showinfo(APP_NAME, t("Fog Launch is already up to date."), parent=self)
+            return
+        question = t("{count} files were updated. Restart Fog Launch now to use the new version?", count=changed)
+        if messagebox.askyesno(APP_NAME, question, parent=self):
+            subprocess.Popen([sys.executable, "-m", "fog_launch"], cwd=update.program_dir())
+            self.close()
 
     def first_start(self) -> None:
         if self.manager.library:

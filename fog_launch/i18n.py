@@ -210,6 +210,24 @@ GERMAN = {
         "Passwort: nicht weitergeben und nicht in einen synchronisierten Ordner legen.",
     "not found – run get_legendary.py or choose legendary.exe":
         "nicht gefunden – get_legendary.py ausführen oder legendary.exe wählen",
+    "Update Fog Launch…": "Fog Launch aktualisieren…",
+    "Version {version}": "Version {version}",
+    "Updating Fog Launch": "Fog Launch wird aktualisiert",
+    "Fetch the newest Fog Launch from github.com/{repository} and replace the program files in "
+    "'{folder}'? Your profiles and settings are not touched.":
+        "Den neuesten Stand von Fog Launch von github.com/{repository} holen und die Programmdateien in "
+        "«{folder}» ersetzen? Deine Profile und Einstellungen bleiben unberührt.",
+    "Fog Launch is already up to date.": "Fog Launch ist bereits aktuell.",
+    "{count} files were updated. Restart Fog Launch now to use the new version?":
+        "{count} Dateien wurden aktualisiert. Fog Launch jetzt neu starten, um die neue Version zu verwenden?",
+    "git could not update Fog Launch: {error}": "git konnte Fog Launch nicht aktualisieren: {error}",
+    "The update could not be downloaded: {error}": "Das Update liess sich nicht herunterladen: {error}",
+    "The downloaded update is not a valid ZIP file.": "Das heruntergeladene Update ist keine gültige ZIP-Datei.",
+    "The downloaded update contains an unexpected path: {name}":
+        "Das heruntergeladene Update enthält einen unerwarteten Pfad: {name}",
+    "The downloaded update does not look like Fog Launch.":
+        "Das heruntergeladene Update sieht nicht nach Fog Launch aus.",
+    "The update could not be written: {error}": "Das Update liess sich nicht schreiben: {error}",
     # Better Together
     "Take over from Better Together": "Aus Better Together übernehmen",
     "Take over from Better Together…": "Aus Better Together übernehmen…",
