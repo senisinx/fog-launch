@@ -35,6 +35,7 @@ HAZE = "#8a9c9f"
 EMBER = "#e39a55"
 EMBER_INK = "#1a1109"
 OK = "#86c79a"
+ASSETS = Path(__file__).resolve().parent / "assets"
 
 KEYS = (
     ["LeftMouseButton", "RightMouseButton", "MiddleMouseButton", "ThumbMouseButton", "ThumbMouseButton2"]
@@ -1074,6 +1075,7 @@ class App(tk.Tk):
         self.geometry("980x720")
         self.minsize(900, 640)
         apply_style(self)
+        self.set_icon()
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.runner: Runner | None = None
 
@@ -1100,6 +1102,20 @@ class App(tk.Tk):
         self.after(300, self.first_start)
 
     # ----------------------------------------------------------------- helpers
+
+    def set_icon(self) -> None:
+        """Show the logo in the title bar and, on Windows, in the taskbar."""
+        try:
+            if os.name == "nt":
+                import ctypes
+
+                # Without its own ID, Windows groups the window under Python's icon.
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("senisinx.FogLaunch")
+                self.iconbitmap(default=str(ASSETS / "icon.ico"))
+            self.logo = tk.PhotoImage(file=str(ASSETS / "icon.png"))
+            self.iconphoto(True, self.logo)
+        except (tk.TclError, OSError, AttributeError):
+            pass  # a missing icon must never stop the program
 
     def guard(self, action: Callable[[], None]) -> Callable[[], None]:
         """Wrap a button action so that a FogError becomes a message box."""

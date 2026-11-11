@@ -1,3 +1,5 @@
+<img src="fog_launch/assets/icon.png" alt="" width="96" align="right">
+
 # Fog Launch
 
 Starts Dead by Daylight (Epic Games version) with several Epic accounts from one installation: one profile
