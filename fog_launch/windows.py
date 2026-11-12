@@ -43,6 +43,10 @@ class Backend:
     def close(self, window: int) -> None:
         pass
 
+    def monitors(self) -> list[tuple[tuple[int, int, int, int], tuple[int, int, int, int], bool]]:
+        """(area, work area, primary) of every monitor; empty where the system cannot tell."""
+        return []
+
 
 class WindowsBackend(Backend):
     available = True
@@ -99,6 +103,32 @@ class WindowsBackend(Backend):
 
     def close(self, window: int) -> None:
         self.user32.PostMessageW(window, 0x0010, 0, 0)  # WM_CLOSE, the same as the window's X
+
+    def monitors(self) -> list[tuple[tuple[int, int, int, int], tuple[int, int, int, int], bool]]:
+        ctypes, wintypes = self.ctypes, self.wintypes
+
+        class MonitorInfo(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                        ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+        callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC,
+                                           ctypes.POINTER(wintypes.RECT), wintypes.LPARAM)
+        self.user32.EnumDisplayMonitors.argtypes = [wintypes.HDC, ctypes.c_void_p, callback_type, wintypes.LPARAM]
+        self.user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MonitorInfo)]
+        found = []
+
+        def box(r: object) -> tuple[int, int, int, int]:
+            return r.left, r.top, r.right - r.left, r.bottom - r.top  # type: ignore[attr-defined]
+
+        def visit(monitor: int, _dc: int, _rect: object, _parameter: int) -> bool:
+            info = MonitorInfo()
+            info.cbSize = ctypes.sizeof(MonitorInfo)
+            if self.user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                found.append((box(info.rcMonitor), box(info.rcWork), bool(info.dwFlags & 1)))
+            return True
+
+        self.user32.EnumDisplayMonitors(None, None, callback_type(visit), 0)
+        return found
 
 
 def default_backend() -> Backend:
@@ -229,6 +259,9 @@ class Tracker:
             return False
         self.backend.close(window)
         return True
+
+    def monitors(self) -> list:
+        return self.backend.monitors()
 
     def close_all(self) -> int:
         windows = self.backend.game_windows()

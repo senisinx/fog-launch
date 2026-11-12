@@ -249,6 +249,34 @@ GERMAN = {
     "The window position needs four whole numbers: X, Y, width and height.":
         "Die Fensterposition braucht vier ganze Zahlen: X, Y, Breite und Höhe.",
     "The window position is outside the possible range.": "Die Fensterposition liegt ausserhalb des Möglichen.",
+    # arranging windows
+    "Arrange windows…": "Fenster anordnen…",
+    "Arrange windows": "Fenster anordnen",
+    "Apply": "Übernehmen",
+    "Add profiles to the sequence first.": "Füge der Folge zuerst Profile hinzu.",
+    "Layout": "Anordnung",
+    "All monitors": "Alle Monitore",
+    "Monitor {number}": "Monitor {number}",
+    "main": "Hauptmonitor",
+    "Side by side": "Nebeneinander",
+    "Stacked": "Untereinander",
+    "Grid": "Raster",
+    "One per monitor": "Je ein Monitor",
+    "Keep 16:9": "16:9 beibehalten",
+    "Windows": "Fenster",
+    "not arranged": "nicht angeordnet",
+    "Place": "Platzieren",
+    "Do not arrange": "Nicht anordnen",
+    "Take from running windows": "Von laufenden Fenstern übernehmen",
+    "Snap to edges": "An Kanten einrasten",
+    'Drag a window to move it, drag a corner to resize it. Arranging works with the display mode "Window" or '
+    '"Borderless window".':
+        "Ein Fenster ziehen verschiebt es, eine Ecke ziehen ändert die Grösse. Das Anordnen klappt mit dem "
+        "Anzeigemodus «Fenster» oder «Rahmenloses Fenster».",
+    "The monitors could not be read; this shows only the main screen.":
+        "Die Monitore liessen sich nicht auslesen; zu sehen ist nur der Hauptbildschirm.",
+    "None of these profiles has a game window open that Fog Launch launched.":
+        "Keines dieser Profile hat ein von Fog Launch gestartetes Spielfenster offen.",
     # shortcuts
     "Desktop shortcut": "Desktop-Verknüpfung",
     "Shortcut created: {file}": "Verknüpfung angelegt: {file}",

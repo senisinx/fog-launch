@@ -73,9 +73,13 @@ last run is `last-run.log` in Fog Launch's data folder.
 
 ## Game windows
 
-- **Positions.** Each entry of a launch sequence can have a window position (X, Y, width, height). When the
-  game window of that profile appears, Fog Launch moves it there, and again a few times while the game
-  starts. **Take from the running window** copies the position of a window you placed by hand. This works
+- **Arranging.** **Launch sequences → Arrange windows…** shows your monitors as Windows has them, with one
+  rectangle per entry of the sequence. Drag a rectangle to move it and a corner to resize it; edges snap to
+  the monitors and to each other. The layout buttons place all windows at once (side by side, stacked, as a
+  grid, one per monitor), on one monitor or spread over all, and can keep them 16:9 so the game fills its
+  window. **Take from running windows** copies where the games are now.
+- **Positions.** When the game window of a profile appears, Fog Launch moves it to its place, and again a few
+  times while the game starts. A single entry's numbers can also be typed in its **Edit…** dialog. This works
   best with the display mode *Window* or *Borderless window*.
 - **Running and closing.** The Profiles tab shows which profiles have a game open. **Close game** and
   **Close all games** ask the window to close, the same as its X button.
@@ -138,7 +142,9 @@ the program are not touched. Nothing is checked or downloaded in the background.
 | --- | --- |
 | `fog_launch/core.py` | Profiles, presets, sequences, encrypted sign-ins, the Legendary check, taking over Better Together |
 | `fog_launch/runner.py` | Runs Legendary and works through a launch sequence |
-| `fog_launch/windows.py` | Finds, moves and closes game windows |
+| `fog_launch/windows.py` | Finds, moves and closes game windows; lists the monitors |
+| `fog_launch/arrange.py` | Layouts, snapping and the screen-to-picture mapping for arranging windows |
+| `fog_launch/gui_arrange.py` | The window "Arrange windows" |
 | `fog_launch/ini.py` | Reads and changes the game's settings files |
 | `fog_launch/gui.py` | The window |
 | `fog_launch/cli.py` | Command line, runs without window, desktop shortcuts |
