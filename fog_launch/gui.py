@@ -675,6 +675,7 @@ class SequencesTab(Tab):
         spin = ttk.Spinbox(delay, from_=0, to=3600, textvariable=self.delay, width=6, command=self.app.guard(self.store))
         spin.pack(side="left", padx=(8, 0))
         spin.bind("<FocusOut>", lambda _event: self.app.guard(self.store)())
+        self.button(delay, t("Arrange windows…"), self.arrange).pack(side="right")
         ttk.Label(right, style="Hint.TLabel", wraplength=600, justify="left",
                   text=t("With a preset, Fog Launch waits at least 30 seconds so the game can read it.") + " "
                   + t("–: current settings, the folder from the settings, the game decides.")).pack(
@@ -793,6 +794,19 @@ class SequencesTab(Tab):
 
     def shortcut(self) -> None:
         self.app.make_shortcut("sequence", self.need_name())
+
+    def arrange(self) -> None:
+        from .gui_arrange import ArrangeDialog
+
+        entries = [dict(entry) for entry in self.entries()]
+        if not entries:
+            raise FogError("Add profiles to the sequence first.")
+        positions = ArrangeDialog(self, self.manager, self.app.tracker, entries).show()
+        if positions is None:
+            return
+        for entry, position in zip(entries, positions):
+            entry["position"] = position
+        self.store(entries)
 
 
 class PresetTab(Tab):
