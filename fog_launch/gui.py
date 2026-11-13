@@ -1428,7 +1428,7 @@ class App(tk.Tk):
             return
         question = t("{count} files were updated. Restart Fog Launch now to use the new version?", count=changed)
         if messagebox.askyesno(APP_NAME, question, parent=self):
-            subprocess.Popen(update.restart_command(), cwd=update.program_dir())
+            subprocess.Popen(update.restart_command(), cwd=update.program_dir(), env=update.restart_environment())
             self.close()
 
     def download_legendary(self) -> None:

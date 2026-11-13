@@ -259,6 +259,20 @@ def restart_command() -> list[str]:
     return [sys.executable, "-m", "fog_launch"]
 
 
+def restart_environment() -> dict[str, str]:
+    """The environment for the restarted program.
+
+    The single-file program unpacks itself into a temporary folder. A copy
+    started from it would otherwise take that folder over: it would run the
+    old version's files and keep the old program from removing the folder.
+    PYINSTALLER_RESET_ENVIRONMENT makes it unpack afresh, as a new start does.
+    """
+    env = os.environ.copy()
+    if frozen():
+        env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
+
+
 # --------------------------------------------------------------- Legendary
 
 
