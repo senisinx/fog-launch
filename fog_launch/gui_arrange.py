@@ -42,6 +42,8 @@ class ArrangeDialog(Dialog):
             tuple(entry["position"]) if entry.get("position") else None for entry in entries  # type: ignore[misc]
         ]
         self.selected: int | None = 0 if entries else None
+        self.model: int | None = None    # the window whose size "Place" and "Take over size" copy
+        self.standard = False            # the user chose the standard size instead of a window
         self.drag: dict[str, Any] | None = None
 
         top = ttk.Frame(self.body)
@@ -87,7 +89,13 @@ class ArrangeDialog(Dialog):
             entry.grid(row=index // 2 * 2 + 1, column=index % 2, sticky="w", padx=(0, 8), pady=(0, 6))
             entry.bind("<Return>", lambda _event: (self.apply_fields(), "break")[1])
             entry.bind("<FocusOut>", lambda _event: self.apply_fields())
-        ttk.Button(side, text=t("Place"), command=self.place_selected).pack(fill="x", pady=(4, 0))
+        ttk.Label(side, text=t("Same size as"), style="Hint.TLabel").pack(anchor="w", pady=(4, 0))
+        self.source = tk.StringVar()
+        self.source_box = ttk.Combobox(side, textvariable=self.source, state="readonly", width=24)
+        self.source_box.pack(fill="x", pady=(2, 6))
+        self.source_box.bind("<<ComboboxSelected>>", lambda _event: self.pick_model())
+        ttk.Button(side, text=t("Place"), command=self.place_selected).pack(fill="x")
+        ttk.Button(side, text=t("Take over size"), command=self.copy_size).pack(fill="x", pady=(6, 0))
         ttk.Button(side, text=t("Do not arrange"), command=self.clear_selected).pack(fill="x", pady=(6, 0))
         ttk.Button(side, text=t("Take from running windows"), command=self.from_running).pack(fill="x", pady=(18, 0))
         self.snap = tk.BooleanVar(value=True)
@@ -116,6 +124,34 @@ class ArrangeDialog(Dialog):
         choice = self.screen_names.index(self.screen.get())
         return self.monitors if choice == 0 else [arrange.ordered(self.monitors)[choice - 1]]
 
+    def name(self, index: int) -> str:
+        return f"{index + 1}. {self.entries[index]['profile']}"
+
+    def models(self) -> list[int]:
+        """The windows the selected one can copy from: every other window that has a place."""
+        return [i for i, rect in enumerate(self.rects) if rect is not None and i != self.selected]
+
+    def fill_models(self) -> None:
+        """Offer the other placed windows; keep the chosen one, else take the nearest one before."""
+        choices = self.models()
+        if self.model not in choices:
+            before = [i for i in choices if self.selected is not None and i < self.selected]
+            self.model = before[-1] if before else (choices[0] if choices else None)
+        self.source_box.configure(values=[t("Standard size")] + [self.name(i) for i in choices])
+        copying = self.model is not None and not self.standard
+        self.source.set(self.name(self.model) if copying else t("Standard size"))  # type: ignore[arg-type]
+
+    def pick_model(self) -> None:
+        choice = self.source_box.current()
+        self.standard = choice <= 0
+        if choice > 0:
+            self.model = self.models()[choice - 1]
+
+    def model_rect(self) -> Rect | None:
+        if self.model is None or self.standard or self.model == self.selected:
+            return None
+        return self.rects[self.model]
+
     def fill_list(self) -> None:
         self.list.delete(0, "end")
         for index, entry in enumerate(self.entries):
@@ -126,6 +162,7 @@ class ArrangeDialog(Dialog):
         if self.selected is not None:
             self.list.selection_clear(0, "end")
             self.list.selection_set(self.selected)
+        self.fill_models()
         self.show_fields()
 
     def show_fields(self) -> None:
@@ -134,6 +171,8 @@ class ArrangeDialog(Dialog):
             variable.set(str(value))
 
     def select(self, index: int | None) -> None:
+        if index != self.selected and self.selected is not None and self.rects[self.selected] is not None:
+            self.model = self.selected      # the window just worked on is the one to copy from
         self.selected = index
         self.fill_list()
         self.draw()
@@ -257,11 +296,31 @@ class ArrangeDialog(Dialog):
     def place_selected(self) -> None:
         if self.selected is None:
             return
+        model = self.model_rect()
+        if model:
+            place = arrange.beside(model, self.monitors, self.others(self.selected))
+            step = (model[0] + 40, model[1] + 40, model[2], model[3])
+            if not place:       # no free side: a little below and right of it, as windows cascade
+                place = step if arrange.on_screen(step, self.monitors) else model
+            self.rects[self.selected] = place
+            self.changed()
+            return
         work = arrange.ordered(self.target_area())[0].work
         width, height = min(1280, work[2]), min(720, work[3])
         step = 40 * self.selected
         rect = (work[0] + step, work[1] + step, width, height)
         self.rects[self.selected] = rect if arrange.on_screen(rect, self.monitors) else (work[0], work[1], width, height)
+        self.changed()
+
+    def copy_size(self) -> None:
+        """Give the selected window the size of the chosen one, where it stands."""
+        if self.selected is None:
+            return
+        model, rect = self.model_rect(), self.rects[self.selected]
+        if not model or not rect:
+            self.place_selected()
+            return
+        self.rects[self.selected] = (rect[0], rect[1], model[2], model[3])
         self.changed()
 
     def clear_selected(self) -> None:

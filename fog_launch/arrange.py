@@ -205,6 +205,36 @@ def on_screen(rect: Rect, monitors: list[Monitor]) -> bool:
     return any(overlaps(rect, m.area) for m in monitors)
 
 
+def fits(rect: Rect, monitors: list[Monitor], others: list[Rect]) -> bool:
+    """Whether the window lies wholly on one monitor and covers no other window."""
+    x, y, width, height = rect
+    inside = any(
+        m.area[0] <= x and m.area[1] <= y and x + width <= m.area[0] + m.area[2] and y + height <= m.area[1] + m.area[3]
+        for m in monitors
+    )
+    return inside and not any(overlaps(rect, other) for other in others)
+
+
+def beside(source: Rect, monitors: list[Monitor], others: list[Rect]) -> Rect | None:
+    """A free place for a window as large as ``source``, as near to it as there is one.
+
+    Tried in this order: to its right, below, to its left, above; then right
+    of and below every other placed window; then the top left corner of each
+    monitor. ``others`` are the windows already placed (``source`` may be
+    among them). None when no such place is free.
+    """
+    x, y, width, height = source
+    taken = [*others, source]
+    places = [(x + width, y), (x, y + height), (x - width, y), (x, y - height)]
+    for ox, oy, other_w, other_h in others:
+        places += [(ox + other_w, oy), (ox, oy + other_h)]
+    places += [(m.work[0], m.work[1]) for m in ordered(monitors)]
+    for px, py in places:
+        if fits((px, py, width, height), monitors, taken):
+            return px, py, width, height
+    return None
+
+
 # ------------------------------------------------------- canvas mapping
 
 

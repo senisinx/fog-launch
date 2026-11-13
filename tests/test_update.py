@@ -98,6 +98,18 @@ class ExeTests(unittest.TestCase):
                 update.install(release, self.exe.parent)
 
 
+class RestartTests(unittest.TestCase):
+    def test_the_restarted_program_file_unpacks_afresh(self):
+        with mock.patch.object(update, "frozen", return_value=True):
+            self.assertEqual(update.restart_environment().get("PYINSTALLER_RESET_ENVIRONMENT"), "1")
+
+    def test_a_copy_run_from_source_keeps_its_environment(self):
+        with mock.patch.object(update, "frozen", return_value=False), \
+                mock.patch.dict(update.os.environ, clear=False) as env:
+            env.pop("PYINSTALLER_RESET_ENVIRONMENT", None)
+            self.assertNotIn("PYINSTALLER_RESET_ENVIRONMENT", update.restart_environment())
+
+
 class ZipUpdateTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
