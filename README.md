@@ -77,7 +77,9 @@ last run is `last-run.log` in Fog Launch's data folder.
   rectangle per entry of the sequence. Drag a rectangle to move it and a corner to resize it; edges snap to
   the monitors and to each other. The layout buttons place all windows at once (side by side, stacked, as a
   grid, one per monitor), on one monitor or spread over all, and can keep them 16:9 so the game fills its
-  window. **Take from running windows** copies where the games are now.
+  window. **Take from running windows** copies where the games are now. **Same size as** picks another
+  window to copy from: **Place** then puts the selected window right next to it in the same size, and
+  **Take over size** resizes it where it stands. The window you worked on last is picked by itself.
 - **Positions.** When the game window of a profile appears, Fog Launch moves it to its place, and again a few
   times while the game starts. A single entry's numbers can also be typed in its **Edit…** dialog. This works
   best with the display mode *Window* or *Borderless window*.

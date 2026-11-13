@@ -87,6 +87,30 @@ class ViewTests(unittest.TestCase):
         self.assertGreaterEqual(view.to_canvas(left.area)[0], 0)
 
 
+class BesideTests(unittest.TestCase):
+    def test_the_next_window_goes_to_the_right(self):
+        first = (0, 0, 1280, 720)
+        self.assertEqual(arrange.beside(first, [WIDE, SIDE], [first]), (1280, 0, 1280, 720))
+
+    def test_a_taken_or_missing_side_is_skipped(self):
+        first, second = (0, 0, 1720, 720), (1720, 0, 1720, 720)
+        # right of the second one the monitor ends, so the window goes below
+        self.assertEqual(arrange.beside(second, [WIDE], [first, second]), (1720, 720, 1720, 720))
+        # right is taken and nothing fits below: left of it
+        low = (1720, 720, 1720, 720)
+        self.assertEqual(arrange.beside(low, [WIDE], [first, second, low]), (0, 720, 1720, 720))
+
+    def test_without_a_free_side_the_next_free_place_is_taken(self):
+        first, second = (0, 0, 1600, 900), (1600, 0, 1600, 900)
+        # nothing fits around the second window on the ultrawide: the other monitor is free
+        self.assertEqual(arrange.beside(second, [WIDE, SIDE], [first, second]), (3440, 0, 1600, 900))
+
+    def test_no_room_gives_none(self):
+        whole = WIDE.area
+        self.assertIsNone(arrange.beside(whole, [WIDE], [whole]))
+        self.assertFalse(arrange.fits((3000, 0, 1280, 720), [WIDE, SIDE], []))    # would span two monitors
+
+
 if __name__ == "__main__":
     unittest.main()
 
