@@ -125,9 +125,11 @@ acceptable is between you, Epic and Behaviour.
 
 - `FogLaunch.exe` is replaced by the release's file once its SHA-256 matches `SHA256SUMS.txt`;
 - a copy made with `git clone` moves forward to the release's tag;
-- a copy from a ZIP download gets the release's source ZIP, and only the files inside it are replaced.
+- a copy from a ZIP download gets the release's `FogLaunch-source.zip` once its SHA-256 matches
+  `SHA256SUMS.txt`, and only the files inside it are replaced.
 
-Work on `main` that is not released yet is never installed. Profiles, settings and a `legendary.exe` next to
+Downloads show their progress in the status line, stop when you press **Cancel**, and are tried again twice
+after a dropped connection. Work on `main` that is not released yet is never installed. Profiles, settings and a `legendary.exe` next to
 the program are not touched. Nothing is checked or downloaded in the background.
 
 ## Publishing a release
@@ -135,8 +137,9 @@ the program are not touched. Nothing is checked or downloaded in the background.
 1. Raise `__version__` in `fog_launch/__init__.py` and merge that into `main`.
 2. On GitHub: **Releases → Draft a new release**, tag `v` plus that version (for example `v0.3.0`), target
    `main`, **Publish release**.
-3. The workflow *Release* runs the tests, builds `FogLaunch.exe` and attaches it with `SHA256SUMS.txt`. It
-   stops if the tag does not match the version in the code.
+3. The workflow *Release* runs the tests, builds `FogLaunch.exe` and `FogLaunch-source.zip` and attaches both
+   with `SHA256SUMS.txt`. It stops if the tag does not match the version in the code. Until it is done (a few
+   minutes), **Update Fog Launch…** answers that the new version is still being built.
 
 ## Layout
 

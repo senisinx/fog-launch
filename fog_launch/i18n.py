@@ -282,6 +282,7 @@ GERMAN = {
         "Keines dieser Profile hat ein von Fog Launch gestartetes Spielfenster offen.",
     # shortcuts
     "Desktop shortcut": "Desktop-Verknüpfung",
+    "Creating a shortcut": "Verknüpfung wird angelegt",
     "Shortcut created: {file}": "Verknüpfung angelegt: {file}",
     "Desktop shortcuts can only be created on Windows.": "Desktop-Verknüpfungen gibt es nur unter Windows.",
     "The shortcut could not be created: {error}": "Die Verknüpfung liess sich nicht anlegen: {error}",
@@ -338,6 +339,8 @@ GERMAN = {
         "Die Programmdatei von Version {tag} wird noch gebaut. Versuche es in ein paar Minuten noch einmal.",
     "The downloaded program does not match its checksum. Nothing was changed.":
         "Das heruntergeladene Programm passt nicht zur Prüfsumme. Es wurde nichts geändert.",
+    "The downloaded update does not match its checksum. Nothing was changed.":
+        "Das heruntergeladene Update passt nicht zur Prüfsumme. Es wurde nichts geändert.",
     "{name} is not listed in {sums}.": "{name} steht nicht in {sums}.",
     # Better Together
     "Take over from Better Together": "Aus Better Together übernehmen",

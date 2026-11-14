@@ -818,6 +818,7 @@ class PresetTab(Tab):
         super().__init__(app)
         self.live = t("Current game settings")
         self.text = ""
+        self.shown = ""  # what edited() gave right after loading, to notice unsaved changes
         self.encoding = "utf-8"
         bar = ttk.Frame(self)
         bar.pack(fill="x")
@@ -845,13 +846,25 @@ class PresetTab(Tab):
         self.chooser.configure(values=[self.live, *names])
         if self.choice.get() not in (self.live, *names):
             self.choice.set(self.live)
+        elif self.dirty():
+            return  # keep unsaved edits; they would be lost by reading the file again
         self.load(quiet=True)
+
+    def dirty(self) -> bool:
+        """Whether the fields hold changes that are not saved yet."""
+        if not self.text:
+            return False
+        try:
+            return self.edited() != self.shown
+        except (ValueError, TypeError, FogError):
+            return True
 
     def load(self, quiet: bool = False) -> None:
         try:
             self.text, self.encoding = self.manager.read_preset(self.kind, self.preset())
         except FogError as error:
             self.text = ""
+            self.shown = ""
             self.show("")
             self.note.configure(text=say(error))
             if not quiet:
@@ -859,6 +872,10 @@ class PresetTab(Tab):
             return
         self.note.configure(text=str(self.manager.preset_source(self.kind, self.preset())))
         self.show(self.text)
+        try:
+            self.shown = self.edited() if self.text else ""
+        except (ValueError, TypeError, FogError):
+            self.shown = ""
 
     def show(self, text: str) -> None:
         raise NotImplementedError
@@ -1251,6 +1268,7 @@ class App(tk.Tk):
         self.refresh()
         self.after(100, self.drain)
         self.after(300, self.first_start)
+        self.warm_legendary()
 
     # ----------------------------------------------------------------- helpers
 
@@ -1404,6 +1422,21 @@ class App(tk.Tk):
         self.work(t("Looking for a new version"), lambda _runner: update.latest_release(), legendary=False,
                   then=self.offer_update)
 
+    @staticmethod
+    def progress(runner: Runner, label: str) -> Callable[[int, int], None]:
+        """A progress callback for update.fetch that shows the megabytes in the status line."""
+        shown = [-1]
+
+        def report(done: int, total: int) -> None:
+            tenth = done * 10 // (1024 * 1024)  # update the line every 0.1 MB, not for every piece
+            if tenth == shown[0]:
+                return
+            shown[0] = tenth
+            text = f"{done / 1048576:.1f} / {total / 1048576:.1f} MB" if total else f"{done / 1048576:.1f} MB"
+            runner.emit("status", f"{label} … {text}")
+
+        return report
+
     def offer_update(self, release: update.Release) -> None:
         if not release.newer:
             messagebox.showinfo(APP_NAME, t("Fog Launch {version} is the newest version.", version=__version__),
@@ -1419,8 +1452,10 @@ class App(tk.Tk):
         if notes:
             question += "\n\n" + notes
         if messagebox.askyesno(APP_NAME, question, parent=self):
-            self.work(t("Updating Fog Launch"), lambda _runner: update.install(release), legendary=False,
-                      then=self.after_update)
+            self.work(t("Updating Fog Launch"),
+                      lambda runner: update.install(release, progress=self.progress(runner, t("Updating Fog Launch")),
+                                                    cancel=runner.cancel),
+                      legendary=False, then=self.after_update)
 
     def after_update(self, changed: int) -> None:
         if not changed:
@@ -1438,19 +1473,34 @@ class App(tk.Tk):
             version=update.LEGENDARY_VERSION,
         )
         if messagebox.askyesno(APP_NAME, question, parent=self):
-            self.work(t("Downloading Legendary"), lambda _runner: update.download_legendary(), legendary=False,
-                      then=self.after_legendary)
+            self.work(t("Downloading Legendary"),
+                      lambda runner: update.download_legendary(
+                          progress=self.progress(runner, t("Downloading Legendary")), cancel=runner.cancel),
+                      legendary=False, then=self.after_legendary)
 
     def after_legendary(self, path: Path) -> None:
         if self.manager.config.get("legendary") and Path(self.manager.config.get("legendary")) != path:
             self.manager.config.set("legendary", str(path))
         self.refresh()
+        self.warm_legendary()
         self.say(t("Legendary saved: {file}", file=path))
 
     def make_shortcut(self, kind: str, name: str) -> None:
+        """PowerShell can take seconds to start, so the shortcut is made in the background."""
         label = f"{APP_NAME} – {name}"
-        path = cli.create_shortcut(kind, name, label)
-        self.say(t("Shortcut created: {file}", file=path))
+        self.work(t("Creating a shortcut"), lambda _runner: cli.create_shortcut(kind, name, label), legendary=False,
+                  then=lambda path: self.say(t("Shortcut created: {file}", file=path)))
+
+    def warm_legendary(self) -> None:
+        """Hash legendary.exe in the background, so the first launch does not wait for it in the window."""
+
+        def check() -> None:
+            try:
+                self.manager.legendary()
+            except Exception:  # noqa: BLE001 - only filling the cache; the real check reports problems
+                pass
+
+        threading.Thread(target=check, daemon=True).start()
 
     def first_start(self) -> None:
         if self.manager.library:
