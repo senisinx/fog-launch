@@ -41,6 +41,10 @@ class FogError(Exception):
         super().__init__(template.format(**values) if values else template)
 
 
+class Cancelled(Exception):
+    """The user pressed Cancel while a job was running."""
+
+
 class Cipher:
     """Encrypts the Epic sign-ins. This one is for systems without DPAPI."""
 

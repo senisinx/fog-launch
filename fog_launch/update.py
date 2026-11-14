@@ -9,8 +9,12 @@ is on the main branch at the moment:
 - the Windows program (FogLaunch.exe) is replaced by the release's exe,
   after its SHA-256 has been checked against the release's SHA256SUMS.txt;
 - a copy made with `git clone` is moved forward to the release's tag;
-- a copy from a ZIP download gets the release's source ZIP, and only the
-  files inside it are replaced.
+- a copy from a ZIP download gets the release's source ZIP (built by the
+  release workflow and listed in SHA256SUMS.txt), and only the files inside
+  it are replaced, after its SHA-256 has been checked.
+
+Downloads are read in pieces: they report their progress, stop when Cancel
+is pressed, and try again twice after a dropped connection or a server error.
 """
 
 from __future__ import annotations
@@ -23,22 +27,29 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from . import __version__
 from .core import KNOWN_LEGENDARY
-from .store import FogError, data_dir, write_bytes_atomic
+from .store import Cancelled, FogError, data_dir, write_bytes_atomic
 
 REPOSITORY = "senisinx/Fog-Launch"
 LATEST_RELEASE = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 GIT_URL = f"https://github.com/{REPOSITORY}.git"
 EXE_NAME = "FogLaunch.exe"
 SUMS_NAME = "SHA256SUMS.txt"
+SOURCE_NAME = "FogLaunch-source.zip"
 MAX_DOWNLOAD = 100 * 1024 * 1024
+CHUNK = 64 * 1024
+TRIES = 3
+RETRY_WAIT = 2.0  # seconds before the second try, doubled before the third
 NEEDED = ("fog_launch/__init__.py", "fog_launch/gui.py", "fog_launch/core.py")
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -67,20 +78,70 @@ def version_tuple(text: str) -> tuple[int, ...]:
     return tuple(int(number) for number in numbers[:3]) if numbers else (0,)
 
 
-def fetch(url: str, accept: str | None = None) -> bytes:
+Progress = Callable[[int, int], None]  # bytes so far, total (0 when the server does not say)
+
+
+def _transient(error: BaseException) -> bool:
+    """Whether trying again could help: a dropped connection or a server-side error."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code == 429 or error.code >= 500
+    return isinstance(error, (urllib.error.URLError, TimeoutError, ConnectionError))
+
+
+def _check(cancel: threading.Event | None) -> None:
+    if cancel is not None and cancel.is_set():
+        raise Cancelled()
+
+
+def _read(request: urllib.request.Request, progress: Progress | None, cancel: threading.Event | None) -> bytes:
+    with urllib.request.urlopen(request, timeout=60) as response:
+        try:
+            total = int(response.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError, AttributeError):
+            total = 0
+        if total > MAX_DOWNLOAD:
+            raise FogError("The download failed: {error}", error="file too large")
+        parts: list[bytes] = []
+        size = 0
+        while True:
+            _check(cancel)
+            chunk = response.read(CHUNK)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > MAX_DOWNLOAD:
+                raise FogError("The download failed: {error}", error="file too large")
+            parts.append(chunk)
+            if progress:
+                progress(size, total)
+    return b"".join(parts)
+
+
+def fetch(url: str, accept: str | None = None, progress: Progress | None = None,
+          cancel: threading.Event | None = None) -> bytes:
+    """Download a file of at most MAX_DOWNLOAD bytes.
+
+    `progress` is called after every piece; `cancel` is checked between
+    pieces and while waiting to try again, and raises Cancelled once set.
+    """
     request = urllib.request.Request(url, headers={"User-Agent": f"FogLaunch/{__version__}"})
     if accept:
         request.add_header("Accept", accept)
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            data = response.read(MAX_DOWNLOAD + 1)
-    except urllib.error.HTTPError as error:
-        raise FogError("The download failed: {error}", error=f"HTTP {error.code} ({url})") from error
-    except (urllib.error.URLError, OSError, ValueError) as error:
-        raise FogError("The download failed: {error}", error=error) from error
-    if len(data) > MAX_DOWNLOAD:
-        raise FogError("The download failed: {error}", error="file too large")
-    return data
+    for attempt in range(TRIES):
+        _check(cancel)
+        try:
+            return _read(request, progress, cancel)
+        except (urllib.error.URLError, OSError, ValueError) as error:
+            if attempt + 1 < TRIES and _transient(error):
+                end = time.monotonic() + RETRY_WAIT * 2 ** attempt
+                while time.monotonic() < end:
+                    _check(cancel)
+                    time.sleep(0.1)
+                continue
+            if isinstance(error, urllib.error.HTTPError):
+                raise FogError("The download failed: {error}", error=f"HTTP {error.code} ({url})") from error
+            raise FogError("The download failed: {error}", error=error) from error
+    raise AssertionError("unreachable")
 
 
 # ---------------------------------------------------------------- releases
@@ -92,7 +153,6 @@ class Release:
     version: tuple[int, ...]
     notes: str
     page: str
-    zip_url: str
     assets: dict[str, str]  # file name -> download URL
 
     @property
@@ -108,7 +168,6 @@ def parse_release(data: dict) -> Release:
             version=version_tuple(tag),
             notes=str(data.get("body") or "").strip(),
             page=str(data.get("html_url") or ""),
-            zip_url=f"https://github.com/{REPOSITORY}/archive/refs/tags/{tag}.zip",
             assets={str(a["name"]): str(a["browser_download_url"]) for a in data.get("assets") or []},
         )
     except (KeyError, TypeError) as error:
@@ -239,18 +298,29 @@ def remove_old_exe() -> None:
             pass
 
 
-def install(release: Release, root: Path | None = None) -> int:
+def checked_zip(data: bytes, sums: str) -> bytes:
+    """The source ZIP, if its SHA-256 is the one SHA256SUMS.txt lists for it."""
+    if hashlib.sha256(data).hexdigest() != expected_sum(sums, SOURCE_NAME):
+        raise FogError("The downloaded update does not match its checksum. Nothing was changed.")
+    return data
+
+
+def install(release: Release, root: Path | None = None, progress: Progress | None = None,
+            cancel: threading.Event | None = None) -> int:
     """Bring this copy to the given release. Returns how many files changed."""
     root = root or program_dir()
-    if frozen():
-        if EXE_NAME not in release.assets or SUMS_NAME not in release.assets:
-            raise FogError("The program file of version {tag} is still being built. Try again in a few minutes.",
-                           tag=release.tag)
-        sums = fetch(release.assets[SUMS_NAME]).decode("utf-8", errors="replace")
-        return replace_exe(fetch(release.assets[EXE_NAME]), sums, Path(sys.executable).resolve())
-    if uses_git(root):
+    if not frozen() and uses_git(root):
         return update_with_git(root, release.tag)
-    return apply_zip(fetch(release.zip_url), root)
+    wanted = EXE_NAME if frozen() else SOURCE_NAME
+    if wanted not in release.assets or SUMS_NAME not in release.assets:
+        raise FogError("The program file of version {tag} is still being built. Try again in a few minutes.",
+                       tag=release.tag)
+    sums = fetch(release.assets[SUMS_NAME], cancel=cancel).decode("utf-8", errors="replace")
+    data = fetch(release.assets[wanted], progress=progress, cancel=cancel)
+    _check(cancel)  # the last moment Cancel can still stop the update
+    if frozen():
+        return replace_exe(data, sums, Path(sys.executable).resolve())
+    return apply_zip(checked_zip(data, sums), root)
 
 
 def restart_command() -> list[str]:
@@ -276,10 +346,12 @@ def restart_environment() -> dict[str, str]:
 # --------------------------------------------------------------- Legendary
 
 
-def download_legendary(target: Path | None = None) -> Path:
+def download_legendary(target: Path | None = None, progress: Progress | None = None,
+                       cancel: threading.Event | None = None) -> Path:
     """Fetch the official Legendary build and keep it only if its checksum is right."""
     target = target or data_dir() / "legendary.exe"
-    data = fetch(LEGENDARY_URL)
+    data = fetch(LEGENDARY_URL, progress=progress, cancel=cancel)
+    _check(cancel)
     found = hashlib.sha256(data).hexdigest()
     if found != LEGENDARY_SHA256:
         raise FogError("The downloaded Legendary does not match its checksum. Nothing was saved.")

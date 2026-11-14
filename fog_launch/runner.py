@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .core import Manager
-from .store import FogError
+from .store import Cancelled, FogError
 from .windows import Tracker
 
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -28,10 +28,6 @@ Emit = Callable[[str, str], None]
 
 STARTED = "{name} started, checking for {seconds} s"
 NEXT = "Next: {name} in {seconds} s"
-
-
-class Cancelled(Exception):
-    pass
 
 
 def printable(command: list[str]) -> str:

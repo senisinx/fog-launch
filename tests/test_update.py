@@ -4,13 +4,15 @@ import json
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
+import urllib.error
 import zipfile
 from pathlib import Path
 from unittest import mock
 
 from fog_launch import __version__, update
-from fog_launch.store import FogError
+from fog_launch.store import Cancelled, FogError
 
 PROGRAM = {
     "fog_launch/__init__.py": b"__version__ = '9'\n",
@@ -48,7 +50,6 @@ class ReleaseTests(unittest.TestCase):
 
     def test_release_fields(self):
         release = update.parse_release(release_json())
-        self.assertEqual(release.zip_url, "https://github.com/senisinx/Fog-Launch/archive/refs/tags/v9.0.0.zip")
         self.assertEqual(release.assets["FogLaunch.exe"], "https://example.invalid/FogLaunch.exe")
         with self.assertRaises(FogError):
             update.parse_release({"body": "no tag"})
@@ -91,11 +92,102 @@ class ExeTests(unittest.TestCase):
         self.assertEqual(self.exe.read_bytes(), b"old program")
         self.assertFalse(self.exe.with_name("FogLaunch.exe.old").exists())
 
+    def test_a_failed_write_puts_the_old_exe_back(self):
+        new = b"new program"
+        sums = f"{hashlib.sha256(new).hexdigest()}  FogLaunch.exe\n"
+        with mock.patch.object(update, "write_bytes_atomic", side_effect=OSError("disk full")):
+            with self.assertRaises(FogError):
+                update.replace_exe(new, sums, self.exe)
+        self.assertEqual(self.exe.read_bytes(), b"old program")
+        self.assertFalse(self.exe.with_name("FogLaunch.exe.old").exists())
+
+    def test_the_old_exe_is_removed_at_the_next_start(self):
+        old = self.exe.with_name("FogLaunch.exe.old")
+        old.write_bytes(b"previous")
+        with mock.patch.object(update.sys, "executable", str(self.exe)):
+            with mock.patch.object(update, "frozen", return_value=False):
+                update.remove_old_exe()
+            self.assertTrue(old.exists())  # a source copy has no exe of its own to clean up
+            with mock.patch.object(update, "frozen", return_value=True):
+                update.remove_old_exe()
+                update.remove_old_exe()  # nothing left: no error
+        self.assertFalse(old.exists())
+        self.assertEqual(self.exe.read_bytes(), b"old program")
+
+    def test_frozen_install_checks_the_exe(self):
+        new = b"new program"
+        release = update.parse_release(release_json())
+        files = {release.assets["SHA256SUMS.txt"]: f"{hashlib.sha256(new).hexdigest()}  FogLaunch.exe\n".encode(),
+                 release.assets["FogLaunch.exe"]: new}
+        with mock.patch.object(update, "frozen", return_value=True), \
+                mock.patch.object(update.sys, "executable", str(self.exe)), \
+                mock.patch.object(update, "fetch", side_effect=lambda url, **_: files[url]):
+            self.assertEqual(update.install(release, self.exe.parent), 1)
+        self.assertEqual(self.exe.read_bytes(), new)
+
     def test_frozen_install_needs_the_built_assets(self):
         release = update.parse_release(release_json(assets=()))
         with mock.patch.object(update, "frozen", return_value=True):
             with self.assertRaises(FogError):
                 update.install(release, self.exe.parent)
+
+
+class FetchTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.file = Path(temp.name) / "download.bin"
+        self.data = bytes(range(256)) * 1000  # 256 kB, several pieces
+        self.file.write_bytes(self.data)
+
+    def test_reads_in_pieces_and_reports_progress(self):
+        seen = []
+        self.assertEqual(update.fetch(self.file.as_uri(), progress=lambda done, total: seen.append((done, total))),
+                         self.data)
+        self.assertGreater(len(seen), 1)
+        self.assertEqual(seen[-1], (len(self.data), len(self.data)))
+
+    def test_the_size_limit_holds(self):
+        with mock.patch.object(update, "MAX_DOWNLOAD", 1000):
+            with self.assertRaises(FogError):
+                update.fetch(self.file.as_uri())
+
+    def test_cancel_stops_the_download(self):
+        cancel = threading.Event()
+        cancel.set()
+        with self.assertRaises(Cancelled):
+            update.fetch(self.file.as_uri(), cancel=cancel)
+        cancel = threading.Event()
+        with self.assertRaises(Cancelled):
+            update.fetch(self.file.as_uri(), cancel=cancel, progress=lambda *_: cancel.set())
+
+    def test_a_dropped_connection_is_tried_again(self):
+        attempts = [urllib.error.URLError("reset"), b"ok"]
+
+        def read(*_args):
+            result = attempts.pop(0)
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        with mock.patch.object(update, "_read", side_effect=read), mock.patch.object(update, "RETRY_WAIT", 0):
+            self.assertEqual(update.fetch("https://example.invalid/x"), b"ok")
+        self.assertEqual(attempts, [])
+
+    def test_errors_that_will_not_go_away_are_not_retried(self):
+        not_found = urllib.error.HTTPError("https://example.invalid/x", 404, "Not Found", {}, None)
+        with mock.patch.object(update, "_read", side_effect=not_found) as read, \
+                mock.patch.object(update, "RETRY_WAIT", 0):
+            with self.assertRaises(FogError) as caught:
+                update.fetch("https://example.invalid/x")
+        self.assertEqual(read.call_count, 1)
+        self.assertIn("HTTP 404", str(caught.exception))
+        busy = urllib.error.HTTPError("https://example.invalid/x", 503, "Busy", {}, None)
+        with mock.patch.object(update, "_read", side_effect=busy) as read, \
+                mock.patch.object(update, "RETRY_WAIT", 0):
+            with self.assertRaises(FogError):
+                update.fetch("https://example.invalid/x")
+        self.assertEqual(read.call_count, update.TRIES)
 
 
 class RestartTests(unittest.TestCase):
@@ -141,11 +233,32 @@ class ZipUpdateTests(unittest.TestCase):
             update.apply_zip(b"<html>not found</html>", self.root)
         self.assertEqual((self.root / "fog_launch" / "gui.py").read_bytes(), b"old gui\n")
 
-    def test_zip_install_uses_the_release_zip(self):
+    def install_with(self, data, sums):
+        release = update.parse_release(release_json(assets=(update.SOURCE_NAME, update.SUMS_NAME)))
+        files = {release.assets[update.SUMS_NAME]: sums.encode(), release.assets[update.SOURCE_NAME]: data}
+        with mock.patch.object(update, "fetch", side_effect=lambda url, **_: files[url]) as fetch:
+            changed = update.install(release, self.root)
+        self.assertEqual(sorted(call.args[0] for call in fetch.call_args_list), sorted(files))
+        return changed
+
+    def test_zip_install_uses_the_checked_release_zip(self):
+        data = github_zip(PROGRAM)
+        self.assertEqual(self.install_with(data, f"{hashlib.sha256(data).hexdigest()}  {update.SOURCE_NAME}\n"), 3)
+        self.assertEqual((self.root / "fog_launch" / "gui.py").read_bytes(), b"new gui\n")
+
+    def test_zip_with_a_wrong_checksum_changes_nothing(self):
+        with self.assertRaises(FogError):
+            self.install_with(github_zip(PROGRAM), f"{'0' * 64}  {update.SOURCE_NAME}\n")
+        with self.assertRaises(FogError):  # not listed at all
+            self.install_with(github_zip(PROGRAM), f"{'0' * 64}  FogLaunch.exe\n")
+        self.assertEqual((self.root / "fog_launch" / "gui.py").read_bytes(), b"old gui\n")
+
+    def test_a_release_without_the_source_zip_is_refused(self):
         release = update.parse_release(release_json())
-        with mock.patch.object(update, "fetch", return_value=github_zip(PROGRAM)) as fetch:
-            self.assertEqual(update.install(release, self.root), 3)
-        fetch.assert_called_once_with(release.zip_url)
+        with mock.patch.object(update, "fetch") as fetch:
+            with self.assertRaises(FogError):
+                update.install(release, self.root)
+        fetch.assert_not_called()
 
 
 class LegendaryDownloadTests(unittest.TestCase):

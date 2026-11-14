@@ -10,9 +10,7 @@ from fog_launch import ini, runner
 from fog_launch.core import (
     GAME_EXE,
     Manager,
-    UnknownLegendary,
     check_name,
-    check_position,
     sha256_of,
     import_better_together,
     read_better_together,
